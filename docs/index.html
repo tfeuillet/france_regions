@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redessiner les régions : une carte, plusieurs critères</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root { --encre: #23201b; --gris: #6f6a60; --trait: #ddd8cc; --fond: #f7f5ef; --accent: #8a3b12; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: "Source Sans 3", "Segoe UI", Helvetica, Arial, sans-serif; color: var(--encre);
+         background: var(--fond); display: flex; flex-direction: column; font-size: 15px; line-height: 1.45; }
+  header { padding: 14px 20px 0; border-bottom: 1px solid var(--trait); background: #fff; }
+  h1 { font-family: Georgia, "Times New Roman", serif; font-size: 22px; margin: 0; font-weight: 600; }
+  header p { margin: 2px 0 10px; color: var(--gris); }
+  #barre { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 24px; }
+  nav { display: flex; flex-wrap: wrap; gap: 2px; flex: 1; }
+  #curseur { display: flex; align-items: center; gap: 8px; padding-bottom: 7px; font-weight: 600; }
+  #curseur input { width: 190px; accent-color: var(--accent); }
+  #curseur output { font-size: 20px; font-family: Georgia, serif; min-width: 1.4em; text-align: right; }
+  #curseur.inactif { color: var(--gris); font-weight: 400; }
+  nav button { font: inherit; border: 1px solid transparent; border-bottom: none; background: none; padding: 7px 14px;
+               cursor: pointer; color: var(--gris); border-radius: 6px 6px 0 0; }
+  nav button:hover { color: var(--encre); }
+  nav button.actif { background: var(--fond); border-color: var(--trait); color: var(--encre); font-weight: 600;
+                     margin-bottom: -1px; }
+  nav button.aide { margin-left: auto; color: var(--accent); }
+  main { flex: 1; display: flex; min-height: 0; }
+  #zone-carte { flex: 1; position: relative; min-width: 0; }
+  #carte { position: absolute; inset: 0; background: var(--fond); }
+  #encart { position: absolute; left: 12px; bottom: 12px; width: 230px; height: 215px; z-index: 500;
+            border: 1px solid var(--gris); background: var(--fond); box-shadow: 0 1px 6px #0002; }
+  #encart-carte { position: absolute; inset: 0; background: var(--fond); }
+  #encart span { position: absolute; top: 4px; left: 6px; z-index: 600; font-size: 12px; font-weight: 600;
+                 background: #fffc; padding: 0 4px; }
+  #options { position: absolute; top: 10px; right: 10px; z-index: 500; background: #fffd; padding: 4px 8px;
+             border: 1px solid var(--trait); border-radius: 4px; font-size: 13px; }
+  aside { width: 370px; overflow-y: auto; padding: 16px 18px; background: #fff; border-left: 1px solid var(--trait); }
+  h2 { font-family: Georgia, serif; font-size: 19px; margin: 0 0 2px; }
+  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--gris); margin: 18px 0 6px; }
+  .logique { color: var(--accent); font-weight: 600; margin: 0 0 8px; }
+  .petit { font-size: 13px; color: var(--gris); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--trait); vertical-align: top; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th { font-weight: 600; color: var(--gris); font-size: 13px; }
+  .pastille { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 6px;
+              vertical-align: -1px; border: 1px solid #0003; }
+  .etiquette { font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--encre);
+               text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff; transform: translate(-50%, -50%); }
+  #explications { display: none; overflow-y: auto; padding: 24px; width: 100%; }
+  #explications > div { max-width: 1000px; margin: 0 auto; background: #fff; padding: 24px 30px;
+                        border: 1px solid var(--trait); }
+  #explications h2 { margin-top: 26px; }
+  #explications h2:first-child { margin-top: 0; }
+  #explications p, #explications li { max-width: 75ch; }
+  .defile { overflow-x: auto; }
+  .leaflet-container { font: inherit; }
+  @media (max-width: 800px) {
+    main { flex-direction: column; }
+    #zone-carte { min-height: 60vh; }
+    aside { width: 100%; border-left: none; border-top: 1px solid var(--trait); }
+    #encart { width: 150px; height: 140px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Redessiner les régions : une carte, plusieurs critères</h1>
+  <p>Les régions métropolitaines recomposées à partir des intercommunalités (EPCI), selon le critère et le nombre de régions que l'on choisit.</p>
+  <div id="barre">
+    <nav id="onglets"></nav>
+    <label id="curseur">Nombre de régions
+      <input type="range" id="k" step="1"> <output id="k-valeur"></output>
+    </label>
+  </div>
+</header>
+<main>
+  <div id="zone-carte">
+    <div id="carte"></div>
+    <label id="options"><input type="checkbox" id="maille"> Afficher les EPCI</label>
+    <div id="encart"><span>Région parisienne</span><div id="encart-carte"></div></div>
+  </div>
+  <aside id="panneau"></aside>
+  <section id="explications"><div id="texte"></div></section>
+</main>
+
+<script>
+// 13 couleurs sans bleu
+const PALETTE = ["#c0392b", "#f39c12", "#f2d75c", "#7d5a2b", "#d7b98e", "#1e8449", "#a9d18e",
+                 "#6b8e23", "#7b3294", "#c9a0dc", "#e78ac3", "#9a9a9a", "#f4a582"];
+const FRANCE = [[41.3, -5.2], [51.1, 9.6]];
+const PARIS = [[48.1, 1.45], [49.25, 3.56]];
+const nb = (x, d = 0) => x.toLocaleString("fr-FR", { maximumFractionDigits: d, minimumFractionDigits: d });
+const pct = x => nb(100 * x) + " %";
+const millions = x => nb(x / 1e6, 1) + " M";
+const INDICATEURS = [
+  ["population", "Population des régions (min – max)", r => millions(r.pop_min) + " – " + millions(r.pop_max),
+   "Écart entre la région la moins peuplée (la Corse, sauf exception) et la plus peuplée."],
+  ["navettes_internes", "Navettes internes", r => pct(r.navettes_internes),
+   "Part des actifs qui travaillent dans leur région de résidence. Plus elle est élevée, plus les régions correspondent aux espaces vécus."],
+  ["variance_inter_revenu", "Écarts de revenu entre régions", r => pct(r.variance_inter_revenu),
+   "Part des inégalités de niveau de vie entre EPCI qui se retrouve entre les régions (variance inter-régionale). Élevée : régions riches d'un côté, pauvres de l'autre. Faible : chaque région mêle les deux."],
+  ["integrite_bassins", "Intégrité des bassins-versants", r => pct(r.integrite_bassins),
+   "Part de la population vivant dans la région principale de son bassin (région hydrographique). 100 % : aucun bassin n'est coupé par une limite régionale."],
+  ["compacite", "Compacité", r => nb(r.compacite, 2),
+   "Indice de Polsby-Popper moyen (1 = cercle parfait, proche de 0 = formes très étirées ou découpées)."]
+];
+
+let meta, epci, aretes, decoupages, carte, encart, courant, K;
+const couches = { carte: null, encart: null, aretes: [], etiquettes: null };
+
+Promise.all(["meta", "epci", "aretes", "decoupages"].map(f =>
+    fetch("data/" + f + (f === "epci" || f === "aretes" ? ".geojson" : ".json")).then(r => r.json())))
+  .then(([m, e, a, d]) => { meta = m; epci = e; aretes = a; decoupages = d; demarrer(); })
+  .catch(() => { document.getElementById("panneau").innerHTML =
+    "<p>Données absentes : lancez d'abord <code>Rscript run.R</code> pour créer le dossier <code>docs/data</code>.</p>"; });
+
+function demarrer() {
+  carte = L.map("carte", { zoomSnap: 0.25, attributionControl: false, preferCanvas: true }).fitBounds(FRANCE);
+  encart = L.map("encart-carte", { zoomSnap: 0.1, attributionControl: false, zoomControl: false, dragging: false,
+    scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false,
+    preferCanvas: true }).fitBounds(PARIS);
+  // les EPCI (colorés selon leur région) puis, par-dessus, les limites entre EPCI voisins
+  couches.carte = L.geoJSON(epci, { onEachFeature: (f, l) =>
+    l.bindTooltip(() => infobulle(epci.features.indexOf(f)), { sticky: true }) }).addTo(carte);
+  couches.encart = L.geoJSON(epci, { interactive: false }).addTo(encart);
+  [carte, encart].forEach(c => {
+    c.createPane("limites").style.zIndex = 450;
+    c.getPane("limites").style.pointerEvents = "none";
+    couches.aretes.push(L.geoJSON(aretes, { pane: "limites", interactive: false,
+      renderer: L.svg({ pane: "limites" }) }).addTo(c));
+  });
+  document.getElementById("maille").onchange = dessiner;
+
+  const k = document.getElementById("k");
+  k.min = Math.min(...meta.ks); k.max = Math.max(...meta.ks); k.value = K = meta.k_defaut;
+  k.oninput = () => { K = +k.value; courant === "aide" ? expliquer() : dessiner(); };
+
+  const nav = document.getElementById("onglets");
+  meta.scenarios.forEach(s => nav.appendChild(bouton(s.titre, () => afficher(s.id), s.id)));
+  nav.appendChild(bouton("Explications", expliquer, "aide")).classList.add("aide");
+  afficher(meta.scenarios.length > 1 ? meta.scenarios[1].id : meta.scenarios[0].id);
+}
+
+function bouton(texte, action, id) {
+  const b = document.createElement("button");
+  b.textContent = texte; b.dataset.id = id; b.onclick = action;
+  return b;
+}
+function activer(id) {
+  courant = id;
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("actif", b.dataset.id === id));
+  const aide = id === "aide";
+  document.getElementById("zone-carte").style.display = aide ? "none" : "";
+  document.getElementById("panneau").style.display = aide ? "none" : "";
+  document.getElementById("explications").style.display = aide ? "block" : "none";
+  document.getElementById("k-valeur").textContent = K;
+  document.getElementById("curseur").classList.toggle("inactif", id === "actuelles");
+}
+function afficher(id) {
+  activer(id);
+  carte.invalidateSize(); encart.invalidateSize();
+  dessiner();
+}
+
+// Régions du découpage affiché : population, ville principale, voisines, couleur
+let appartenance = [], region = {};
+function composer() {
+  const P = epci.features.map(f => f.properties);
+  appartenance = decoupages[courant][K];
+  region = {};
+  appartenance.forEach((g, i) => {
+    const r = region[g] || (region[g] = { pop: 0, somme: 0, n: 0, chef: i, voisines: new Set() });
+    r.pop += P[i].pop; r.somme += P[i].pop * P[i].revenu; r.n++;
+    if (P[i].pop > P[r.chef].pop) r.chef = i;
+  });
+  meta.voisins.forEach(([i, j]) => {
+    const a = appartenance[i], b = appartenance[j];
+    if (a !== b) { region[a].voisines.add(b); region[b].voisines.add(a); }
+  });
+  // couleur : liée à la ville principale (stable d'une carte à l'autre), différente des voisines
+  const liste = Object.values(region).sort((a, b) => b.pop - a.pop);
+  const prises = new Set();
+  liste.forEach(r => {
+    r.ville = P[r.chef].ville; r.revenu = r.somme / r.pop;
+    const interdites = new Set([...r.voisines].map(v => region[v].couleur).filter(c => c !== undefined));
+    let c = r.chef % PALETTE.length, essais = 0;
+    while ((interdites.has(c) || (prises.size < PALETTE.length && prises.has(c))) && essais++ < PALETTE.length)
+      c = (c + 1) % PALETTE.length;
+    r.couleur = c; prises.add(c);
+  });
+  return liste;
+}
+const infobulle = i => {
+  const p = epci.features[i].properties, r = region[appartenance[i]];
+  return `<b>Région de ${r.ville}</b><br>${nb(r.pop)} habitants · ${r.n} EPCI<br>niveau de vie moyen ${nb(r.revenu)} €<br><span class="petit">${p.nom}</span>`;
+};
+
+function dessiner() {
+  document.getElementById("k-valeur").textContent = K;
+  const sc = meta.scenarios.find(s => s.id === courant);
+  const liste = composer();
+  const maille = document.getElementById("maille").checked;
+  const style = f => {
+    const c = PALETTE[region[appartenance[epci.features.indexOf(f)]].couleur];
+    return { fillColor: c, fillOpacity: 0.9, color: maille ? "#0005" : c, weight: maille ? 0.5 : 1 };
+  };
+  couches.carte.setStyle(style);
+  couches.encart.setStyle(f => ({ ...style(f), color: "#0005", weight: 0.5 }));
+  couches.aretes.forEach(c => c.setStyle(f => {
+    const limite = appartenance[f.properties.i] !== appartenance[f.properties.j];
+    return { color: "#fff", weight: 2.5, opacity: limite ? 1 : 0 };
+  }));
+  couches.etiquettes && couches.etiquettes.remove();
+  couches.etiquettes = L.layerGroup(liste.map(r => {
+    const p = epci.features[r.chef].properties;
+    return L.marker([p.lat, p.lon], { interactive: false,
+      icon: L.divIcon({ className: "", html: `<div class="etiquette">${r.ville}</div>`, iconSize: [0, 0] }) });
+  })).addTo(carte);
+
+  const ind = meta.indicateurs.find(r => r.id === courant && r.k === K);
+  const ref = meta.indicateurs.find(r => r.id === "actuelles");
+  document.getElementById("panneau").innerHTML = `
+    <h2>${sc.titre}</h2>
+    <p class="logique">${sc.logique}</p>
+    <p>${sc.methode}</p>
+    <p class="petit">Données : ${sc.donnees}</p>
+    <h3>Ce que produit ce découpage</h3>
+    <table><tr><th></th><th class="n">${liste.length} régions</th><th class="n">Régions actuelles</th></tr>
+      ${INDICATEURS.map(i => `<tr title="${i[3]}"><td>${i[1]}</td><td class="n"><b>${i[2](ind)}</b></td><td class="n">${ref ? i[2](ref) : ""}</td></tr>`).join("")}
+    </table>
+    <p class="petit">Survolez une ligne pour sa définition ; détail dans l'onglet Explications.</p>
+    <h3>Les ${liste.length} régions</h3>
+    <table><tr><th>Ville principale</th><th class="n">Population</th><th class="n">Niveau de vie</th></tr>
+      ${liste.map(r => `<tr><td><span class="pastille" style="background:${PALETTE[r.couleur]}"></span>${r.ville}</td><td class="n">${millions(r.pop)}</td><td class="n">${nb(r.revenu)} €</td></tr>`).join("")}
+    </table>`;
+}
+
+function expliquer() {
+  activer("aide");
+  const ids = meta.ari.id, titre = id => meta.scenarios.find(s => s.id === id).titre;
+  const ari = meta.ari.valeurs[K], lignes = meta.indicateurs.filter(r => r.k === K);
+  const vert = v => `background: rgba(30, 132, 73, ${Math.max(0, v) * 0.75})`;
+  document.getElementById("texte").innerHTML = `
+    <h2>Le principe</h2>
+    <p>Une région peut se définir de bien des façons : par ce qui se ressemble, par ce qui échange, par ce qui dépend d'une même ville ou d'un même fleuve. Cette carte part des ${epci.features.length} intercommunalités (EPCI) de France métropolitaine et les regroupe en régions d'un seul tenant, en changeant chaque fois le critère de regroupement. Le curseur fixe le nombre de régions, de ${Math.min(...meta.ks)} à ${Math.max(...meta.ks)} ; il y en a 13 aujourd'hui en métropole (18 avec l'outre-mer, non traité ici). La Corse, île, forme toujours une région à elle seule.</p>
+    <p>La proposition de régions calquées sur les bassins-versants (« écorégions ») correspond à l'onglet Eau. Les autres onglets montrent ce que donnerait la même logique appliquée à d'autres critères. Aucun découpage n'est « le bon » : chacun optimise un objectif et en sacrifie d'autres, ce que mesurent les indicateurs ci-dessous.</p>
+
+    <h2>Critères et méthodes</h2>
+    <div class="defile"><table>
+      <tr><th>Onglet</th><th>Logique</th><th>Méthode de régionalisation</th><th>Données</th></tr>
+      ${meta.scenarios.map(s => `<tr><td><b>${s.titre}</b></td><td>${s.logique}</td><td>${s.methode}</td><td>${s.donnees}</td></tr>`).join("")}
+    </table></div>
+    <p>Deux familles d'algorithmes sont utilisées. <b>SKATER</b> (Assunção et al., 2006) relie les EPCI voisins par un arbre couvrant minimal, puis coupe les liens entre voisins les plus dissemblables : il produit des régions contiguës et homogènes, ici avec une population minimale de ${millions(meta.pop_min)} d'habitants. Ses découpages sont emboîtés : passer de 13 à 14 régions revient à couper une région en deux. Les <b>fusions successives</b> partent d'autant de régions que d'unités de départ ; à chaque étape, la région la moins peuplée fusionne avec la voisine qui répond le mieux au critère, jusqu'à obtenir le nombre voulu ; ces découpages sont donc emboîtés eux aussi. Cette règle garantit la contiguïté et limite les déséquilibres de population.</p>
+
+    <h2>Comparaison des découpages en ${K} régions</h2>
+    <div class="defile"><table>
+      <tr><th>Découpage</th>${INDICATEURS.map(i => `<th class="n">${i[1]}</th>`).join("")}</tr>
+      ${lignes.map(r => `<tr><td><b>${titre(r.id)}</b></td>${INDICATEURS.map(i => `<td class="n">${i[2](r)}</td>`).join("")}</tr>`).join("")}
+    </table></div>
+    <ul>${INDICATEURS.map(i => `<li><b>${i[1]}.</b> ${i[3]}</li>`).join("")}</ul>
+
+    <h2>Ressemblance entre découpages en ${K} régions</h2>
+    <p>Indice de Rand ajusté : 1 si deux découpages classent les EPCI exactement de la même façon, 0 s'ils ne se ressemblent pas plus que deux découpages tirés au hasard.</p>
+    <div class="defile"><table>
+      <tr><th></th>${ids.map(i => `<th class="n">${titre(i)}</th>`).join("")}</tr>
+      ${ids.map((a, i) => `<tr><td><b>${titre(a)}</b></td>${ids.map((b, j) => `<td class="n" style="${vert(ari[i][j])}">${nb(ari[i][j], 2)}</td>`).join("")}</tr>`).join("")}
+    </table></div>
+
+    <h2>Métadonnées</h2>
+    <table>
+      <tr><td>Dernière mise à jour des données</td><td>${meta.date}</td></tr>
+      <tr><td>Maille</td><td>${meta.sources.epci}</td></tr>
+      <tr><td>Eau</td><td>${meta.sources.eau}</td></tr>
+      <tr><td>Revenus</td><td>${meta.sources.revenus}</td></tr>
+      <tr><td>Emploi</td><td>${meta.sources.emploi}</td></tr>
+      <tr><td>Navettes</td><td>${meta.sources.flux}</td></tr>
+      <tr><td>Appartenance de chaque EPCI (tous découpages)</td><td><a href="data/epci_regions.csv">epci_regions.csv</a></td></tr>
+    </table>
+
+    <h2>Limites</h2>
+    <ul>
+      <li>Les régions portent le nom de leur commune la plus peuplée : c'est un repère de lecture, pas une proposition de chef-lieu.</li>
+      <li>Les EPCI ne suivent pas les lignes de partage des eaux : chacun est rattaché en entier à son bassin dominant.</li>
+      <li>Les algorithmes sont des heuristiques : ils donnent un bon découpage pour le critère, pas nécessairement le meilleur possible. La population minimale est un choix.</li>
+      <li>Outre-mer non traité. Les quelques communes hors EPCI (îles) sont absentes.</li>
+      <li>Le niveau de vie moyen d'une région est la moyenne des médianes de ses EPCI, pondérée par la population.</li>
+    </ul>`;
+}
+</script>
+</body>
+</html>

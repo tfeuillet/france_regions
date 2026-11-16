@@ -1,0 +1,12 @@
+{
+  "date": "2026-11-16",
+  "controle": "pauvrete : 1 EPCI ; emploi_AZ : 1 EPCI ; emploi_BE : 1 EPCI ; emploi_FZ : 1 EPCI ; emploi_GU : 1 EPCI ; emploi_OQ : 1 EPCI ; emploi_hab : 1 EPCI (remplacées par la médiane nationale) ; 96 % des navettes rattachées à un EPCI",
+  "epci": "1232 EPCI, géographie en vigueur. Contours Etalab d'après l'IGN, populations de l'API Découpage administratif",
+  "eau": "Sandre, BD Carthage 2017, secteurs hydrographiques",
+  "histoire": "Départements et régions d'avant 2016 (code officiel géographique)",
+  "provinces": "Provinces de 1789 : province dominante de chaque département (table dans R/00_fonctions.R)",
+  "europe": "Eurostat, PIB (nama_10r_3gdp) et population (nama_10r_3popgdp), année 2024 ; contours NUTS 2024 © EuroGeographics (GISCO)",
+  "revenus": "Insee, Filosofi (DS_FILOSOFI_CC), millésime 2023",
+  "emploi": "Insee, Flores (DS_FLORES_A5), millésime 2024",
+  "flux": "Insee, recensement, base flux de mobilité domicile-travail (NBFLUX_C22_ACTOCC15P)"
+}

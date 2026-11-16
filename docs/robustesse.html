@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tests de robustesse – Redessiner les régions françaises</title>
+<script src="moteur.js"></script>
+<script src="robustesse.js"></script>
+<style>
+  body { font-family: "Segoe UI", Helvetica, Arial, sans-serif; color: #23201b; background: #f7f5ef; margin: 0; padding: 24px; font-size: 15px; line-height: 1.45; }
+  main { max-width: 1000px; margin: 0 auto; background: #fff; padding: 24px 30px; border: 1px solid #ddd8cc; }
+  h1 { font-family: Georgia, serif; font-size: 22px; margin: 0 0 4px; }
+  h2 { font-family: Georgia, serif; font-size: 18px; margin: 28px 0 4px; }
+  p, li { max-width: 78ch; }
+  table { border-collapse: collapse; font-size: 13px; margin: 8px 0; }
+  th, td { padding: 3px 7px; border: 1px solid #ddd8cc; text-align: right; font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: #6f6a60; font-weight: 600; }
+  td.ok { background: #e3f1e6; } td.voir { background: #f9e1b8; } td.grave { background: #f1b8ae; }
+  .defile { overflow-x: auto; }
+  #etat { color: #8a3b12; font-weight: 600; }
+  button { font: inherit; padding: 6px 14px; cursor: pointer; }
+  .petit { font-size: 13px; color: #6f6a60; }
+</style>
+</head>
+<body>
+<main>
+  <p><a href="index.html">← Retour à la carte</a></p>
+  <h1>Tests de robustesse</h1>
+  <p>Cette page recalcule les découpages dans votre navigateur, à partir des données en ligne. Elle cherche d'abord les cartes aberrantes, puis mesure de combien les cartes changent quand on déplace un poids d'un cran ou quand on modifie les réglages internes de la méthode. Le calcul prend de deux à cinq minutes.</p>
+  <p><button id="lancer">Lancer les tests</button> <span id="etat"></span> <button id="exporter" hidden>Télécharger les résultats</button></p>
+
+  <h2>1. Contrôle de toutes les cartes</h2>
+  <p>Pour chaque onglet et chaque nombre de régions, le test vérifie que le nombre de régions est le bon et que chacune est d'un seul tenant. Il signale aussi les régions qui comptent moins de 1 % de la population et les territoires situés à plus de 3,5 « rayons moyens » de leur pôle. Une case verte indique que rien n'est à signaler. Une case orange désigne une carte à regarder, dont le détail apparaît au survol. Une case rouge signale une erreur, c'est-à-dire une région en plusieurs morceaux ou un nombre de régions incorrect. Une région étirée n'a rien d'anormal quand les fleuves ou les provinces dominent, puisque le bassin de la Loire s'étend sur plus de 500 km.</p>
+  <div class="defile" id="t1"></div>
+
+  <h2>2. Sensibilité aux poids</h2>
+  <p>On déplace un seul poids d'un cran sur dix, pour chaque critère à tour de rôle, et l'on mesure la ressemblance avec la carte de départ par l'indice de Rand ajusté, qui vaut 1 pour deux cartes identiques. Le tableau donne la moyenne et le cas le moins favorable. Le critère en cause apparaît au survol.</p>
+  <div class="defile" id="t2"></div>
+
+  <h2>3. Sensibilité aux réglages internes</h2>
+  <p>Chaque réglage interne de la méthode, défini dans l'objet <code>REGLAGES</code> du fichier <code>moteur.js</code>, est remplacé par une valeur basse puis par une valeur haute. Le tableau donne la ressemblance moyenne avec la carte de référence, calculée sur tous les onglets pour 13 et 18 régions.</p>
+  <div class="defile" id="t3"></div>
+  <p class="petit" id="pied"></p>
+</main>
+<script>
+const SC = {      // idf: 1 = l'Île-de-France garde ses huit départements, comme dans les onglets de la carte
+  "Compromis multicritère": { competitivite: 5, solidarite: 3, flux: 3, provinces: 3, compacite: 5, idf: 1 },
+  "Compétitivité économique": { competitivite: 8, compacite: 4, idf: 1 }, "Solidarité riches-pauvres": { solidarite: 6, equilibre: 2, compacite: 6, idf: 1 },
+  "Trajets quotidiens": { flux: 8, compacite: 4, idf: 1 }, "Provinces historiques": { provinces: 10 },
+  "Bassins des grands fleuves": { eau: 10 }, "Logique de 2016 (avancé)": { competitivite: 5, histoire: 5, compacite: 2, idf: 1 },
+  "Aucun critère": {}
+};
+const LIBELLES = { eloignement: "Pénalité d'éloignement du pôle", partMin: "Taille minimale prioritaire",
+  retouches: "Passes de retouche", marge: "Marge de retouche", villes: "Nombre de villes candidates",
+  expoCaptee: "Pôles, exposant de la population captée", expoDistance: "Pôles, exposant de la distance" };
+const f2 = x => x.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const pause = () => new Promise(r => setTimeout(r, 0));
+const etat = t => { document.getElementById("etat").textContent = t; };
+const resultats = { controles: [], poids: [], reglages: [] };
+
+document.getElementById("lancer").onclick = async () => {
+  document.getElementById("lancer").disabled = true;
+  etat("Chargement des données…");
+  const D = await fetch("data/donnees.json").then(r => r.json());
+  const noms = Object.keys(SC);
+
+  // 1. contrôle de toutes les cartes
+  let h = `<table><tr><th>Onglet</th>${D.ks.map(k => `<th>${k}</th>`).join("")}</tr>`;
+  for (const s of noms) {
+    h += `<tr><td>${s}</td>`;
+    for (const K of D.ks) {
+      etat(`1/3 · ${s}, ${K} régions`); await pause();
+      const c = controler(D, SC[s], K), grave = c.alertes.some(a => /morceaux|au lieu/.test(a));
+      resultats.controles.push({ onglet: s, K, alertes: c.alertes, etirement: c.etirement, popMin: c.popMin, popMax: c.popMax });
+      h += `<td class="${grave ? "grave" : c.alertes.length ? "voir" : "ok"}" title="${c.alertes.join(" ; ") || "rien à signaler"}">${c.alertes.length || ""}</td>`;
+    }
+    h += "</tr>"; document.getElementById("t1").innerHTML = h + "</table>";
+  }
+  const aVoir = resultats.controles.filter(c => c.alertes.length);
+  document.getElementById("t1").innerHTML += aVoir.length ? "<ul>" + aVoir.map(c => `<li>${c.onglet}, ${c.K} régions : ${c.alertes.join(" ; ")}</li>`).join("") + "</ul>" : "<p>Aucune carte à signaler.</p>";
+
+  // 2. sensibilité aux poids
+  const KS2 = [10, 13, 16, 20];
+  h = `<table><tr><th>Onglet</th>${KS2.map(k => `<th>${k} régions : moyenne</th><th>pire cas</th>`).join("")}</tr>`;
+  for (const s of noms.slice(0, -1)) {
+    h += `<tr><td>${s}</td>`;
+    for (const K of KS2) {
+      etat(`2/3 · ${s}, ${K} régions`); await pause();
+      const v = sensibilitePoids(D, SC[s], K), pire = v.reduce((a, b) => b.ari < a.ari ? b : a), moy = v.reduce((a, b) => a + b.ari, 0) / v.length;
+      resultats.poids.push({ onglet: s, K, moyenne: moy, pire: pire.ari, critere: pire.critere, pas: pire.pas });
+      h += `<td>${f2(moy)}</td><td class="${pire.ari < 0.6 ? "voir" : ""}" title="${pire.critere} ${pire.pas > 0 ? "+1" : "−1"}">${f2(pire.ari)}</td>`;
+    }
+    h += "</tr>"; document.getElementById("t2").innerHTML = h + "</table>";
+  }
+
+  // 3. sensibilité aux réglages internes
+  h = "<table><tr><th>Réglage</th><th>Valeur retenue</th><th>Valeur basse</th><th>Ressemblance</th><th>Valeur haute</th><th>Ressemblance</th></tr>";
+  for (const [cle, bornes] of Object.entries(VARIANTES)) {
+    const m = [];
+    for (const val of bornes) {
+      let t = 0, n = 0;
+      for (const s of noms.slice(0, -1)) for (const K of [13, 18]) { etat(`3/3 · ${LIBELLES[cle]}`); await pause(); t += sensibiliteReglage(D, SC[s], K, cle, val); n++; }
+      m.push(t / n);
+    }
+    resultats.reglages.push({ reglage: cle, retenu: REGLAGES[cle], bas: bornes[0], ariBas: m[0], haut: bornes[1], ariHaut: m[1] });
+    h += `<tr><td>${LIBELLES[cle]}</td><td>${f2(REGLAGES[cle])}</td><td>${f2(bornes[0])}</td><td>${f2(m[0])}</td><td>${f2(bornes[1])}</td><td>${f2(m[1])}</td></tr>`;
+    document.getElementById("t3").innerHTML = h + "</table>";
+  }
+  etat("Terminé.");
+  document.getElementById("pied").textContent = "Données du " + D.date + ", tests effectués le " + new Date().toLocaleDateString("fr-FR") + ".";
+  const b = document.getElementById("exporter"); b.hidden = false;
+  b.onclick = () => { const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ donnees: D.date, reglages: REGLAGES, ...resultats }, null, 1)], { type: "application/json" }));
+    a.download = "robustesse.json"; a.click(); };
+};
+</script>
+</body>
+</html>

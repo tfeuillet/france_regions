@@ -3,73 +3,110 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Redessiner les régions : une carte, plusieurs critères</title>
+<title>Redessiner les régions françaises</title>
+<meta name="description" content="Une carte interactive pour redessiner les régions françaises selon la compétitivité économique, la solidarité, les trajets quotidiens, l'histoire ou les fleuves.">
+<meta name="author" content="Thierry Feuillet, Université de Caen Normandie, UMR CNRS IDEES">
+<!-- Aperçu sur les réseaux sociaux. Remplacer VOTRE-COMPTE par le nom du compte GitHub une fois le site publié. -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Redessiner les régions françaises">
+<meta property="og:description" content="Une carte interactive pour redessiner les régions françaises selon la compétitivité économique, la solidarité, les trajets quotidiens, l'histoire ou les fleuves.">
+<meta property="og:image" content="https://VOTRE-COMPTE.github.io/regions-france/apercu.png">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="moteur.js"></script>
 <style>
   :root { --encre: #23201b; --gris: #6f6a60; --trait: #ddd8cc; --fond: #f7f5ef; --accent: #8a3b12; }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body { font-family: "Source Sans 3", "Segoe UI", Helvetica, Arial, sans-serif; color: var(--encre);
          background: var(--fond); display: flex; flex-direction: column; font-size: 15px; line-height: 1.45; }
-  header { padding: 14px 20px 0; border-bottom: 1px solid var(--trait); background: #fff; }
-  h1 { font-family: Georgia, "Times New Roman", serif; font-size: 22px; margin: 0; font-weight: 600; }
-  header p { margin: 2px 0 10px; color: var(--gris); }
+  header { padding: 12px 20px 0; border-bottom: 1px solid var(--trait); background: #fff; }
+  #titre { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-family: Georgia, "Times New Roman", serif; font-size: 24px; margin: 0; font-weight: 600; flex: 1; }
+  #contribuer { position: relative; font-size: 14px; }
+  #contribuer > button { font: inherit; background: none; border: 1px solid var(--accent); color: var(--accent);
+                         border-radius: 4px; padding: 3px 10px; cursor: pointer; }
+  #contribuer div { position: absolute; right: 0; top: 32px; z-index: 1000; background: #fff; border: 1px solid var(--trait);
+                    box-shadow: 0 2px 10px #0002; padding: 10px 14px; width: 300px; }
+  #contribuer div a { display: block; margin: 4px 0; }
   #barre { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 24px; }
   nav { display: flex; flex-wrap: wrap; gap: 2px; flex: 1; }
-  #curseur { display: flex; align-items: center; gap: 8px; padding-bottom: 7px; font-weight: 600; }
-  #curseur input { width: 190px; accent-color: var(--accent); }
-  #curseur output { font-size: 20px; font-family: Georgia, serif; min-width: 1.4em; text-align: right; }
-  #curseur.inactif { color: var(--gris); font-weight: 400; }
-  nav button { font: inherit; border: 1px solid transparent; border-bottom: none; background: none; padding: 7px 14px;
+  nav button { font: inherit; border: 1px solid transparent; border-bottom: none; background: none; padding: 7px 12px;
                cursor: pointer; color: var(--gris); border-radius: 6px 6px 0 0; }
   nav button:hover { color: var(--encre); }
   nav button.actif { background: var(--fond); border-color: var(--trait); color: var(--encre); font-weight: 600;
                      margin-bottom: -1px; }
   nav button.aide { margin-left: auto; color: var(--accent); }
+  #curseur { display: flex; align-items: center; gap: 8px; padding-bottom: 7px; font-weight: 600; }
+  #curseur input { width: 170px; }
+  #curseur output { font-size: 20px; font-family: Georgia, serif; min-width: 1.4em; text-align: right; }
+  #curseur.inactif { color: var(--gris); font-weight: 400; }
+  input[type=range] { accent-color: var(--accent); }
   main { flex: 1; display: flex; min-height: 0; }
   #zone-carte { flex: 1; position: relative; min-width: 0; }
-  #carte { position: absolute; inset: 0; background: var(--fond); }
-  #encart { position: absolute; left: 12px; bottom: 12px; width: 230px; height: 215px; z-index: 500;
-            border: 1px solid var(--gris); background: var(--fond); box-shadow: 0 1px 6px #0002; }
-  #encart-carte { position: absolute; inset: 0; background: var(--fond); }
-  #encart span { position: absolute; top: 4px; left: 6px; z-index: 600; font-size: 12px; font-weight: 600;
-                 background: #fffc; padding: 0 4px; }
+  #carte { position: absolute; inset: 0; background: #e8e6df; }
   #options { position: absolute; top: 10px; right: 10px; z-index: 500; background: #fffd; padding: 4px 8px;
-             border: 1px solid var(--trait); border-radius: 4px; font-size: 13px; }
-  aside { width: 370px; overflow-y: auto; padding: 16px 18px; background: #fff; border-left: 1px solid var(--trait); }
+             border: 1px solid var(--trait); border-radius: 4px; font-size: 13px; display: grid; }
+  #cartouche { position: absolute; left: 10px; bottom: 26px; z-index: 500; background: #fffe; padding: 6px 10px; max-width: 340px;
+               border: 1px solid var(--gris); font-size: 12px; line-height: 1.35; pointer-events: none; }
+  #cartouche b { font-size: 13px; }
+  aside { width: 400px; overflow-y: auto; padding: 16px 18px; background: #fff; border-left: 1px solid var(--trait); }
   h2 { font-family: Georgia, serif; font-size: 19px; margin: 0 0 2px; }
   h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--gris); margin: 18px 0 6px; }
-  .logique { color: var(--accent); font-weight: 600; margin: 0 0 8px; }
   .petit { font-size: 13px; color: var(--gris); }
   table { border-collapse: collapse; width: 100%; font-size: 14px; }
   th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--trait); vertical-align: top; }
   td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   th { font-weight: 600; color: var(--gris); font-size: 13px; }
+  .poids { display: grid; grid-template-columns: 1fr 120px 1.4em; gap: 2px 8px; align-items: center; font-size: 14px; }
+  .poids input { width: 100%; }
+  .poids b { text-align: right; font-variant-numeric: tabular-nums; }
+  .poids .nul { color: var(--gris); }
+  .poids label { cursor: help; }
+  .poids .case { grid-column: 1 / -1; cursor: pointer; margin-top: 6px; display: flex; gap: 6px; align-items: center; }
+  .poids .case input { width: auto; margin: 0; }
+  #cartouche a, #explications a { color: inherit; }
+  #explications a { text-decoration-color: var(--accent); text-underline-offset: 2px; }
+  .poids .aide { grid-column: 1 / -1; font-size: 13px; color: var(--gris); margin: 0 0 4px; }
+  .poids .sous { grid-column: 1 / -1; font-size: 12px; color: var(--gris); text-transform: uppercase; letter-spacing: .04em; margin: 8px 0 0; }
+  details.avance { margin-top: 12px; border-top: 1px solid var(--trait); padding-top: 6px; }
+  details.avance summary { cursor: pointer; font-weight: 600; color: var(--accent); }
   .pastille { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 6px;
               vertical-align: -1px; border: 1px solid #0003; }
   .etiquette { font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--encre);
                text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff; transform: translate(-50%, -50%); }
+  .bande { margin: 4px 0 10px; }
+  .bande svg { width: 100%; height: auto; display: block; }
+  .bande text { font-size: 10px; fill: var(--gris); }
   #explications { display: none; overflow-y: auto; padding: 24px; width: 100%; }
-  #explications > div { max-width: 1000px; margin: 0 auto; background: #fff; padding: 24px 30px;
+  #explications > div { max-width: 1040px; margin: 0 auto; background: #fff; padding: 24px 30px;
                         border: 1px solid var(--trait); }
-  #explications h2 { margin-top: 26px; }
+  #explications h2 { margin-top: 30px; }
   #explications h2:first-child { margin-top: 0; }
-  #explications p, #explications li { max-width: 75ch; }
+  #explications h3 { text-transform: none; letter-spacing: 0; font-size: 16px; color: var(--encre); margin: 22px 0 4px; }
+  #explications p, #explications li { max-width: 80ch; }
+  #explications .exemple { background: var(--fond); border-left: 3px solid var(--accent); padding: 10px 16px; margin: 10px 0; }
+  #explications .exemple table { background: #fff; }
+  #explications td.lecture { font-size: 13px; color: var(--gris); min-width: 22ch; }
   .defile { overflow-x: auto; }
   .leaflet-container { font: inherit; }
   @media (max-width: 800px) {
     main { flex-direction: column; }
     #zone-carte { min-height: 60vh; }
     aside { width: 100%; border-left: none; border-top: 1px solid var(--trait); }
-    #encart { width: 150px; height: 140px; }
   }
 </style>
 </head>
 <body>
 <header>
-  <h1>Redessiner les régions : une carte, plusieurs critères</h1>
-  <p>Les régions métropolitaines recomposées à partir des intercommunalités (EPCI), selon le critère et le nombre de régions que l'on choisit.</p>
+  <div id="titre">
+    <h1>Redessiner les régions françaises</h1>
+    <div id="contribuer">
+      <button type="button" onclick="this.nextElementSibling.hidden ^= true">Proposer une amélioration</button>
+      <div hidden></div>
+    </div>
+  </div>
   <div id="barre">
     <nav id="onglets"></nav>
     <label id="curseur">Nombre de régions
@@ -80,69 +117,169 @@
 <main>
   <div id="zone-carte">
     <div id="carte"></div>
-    <label id="options"><input type="checkbox" id="maille"> Afficher les EPCI</label>
-    <div id="encart"><span>Région parisienne</span><div id="encart-carte"></div></div>
+    <div id="cartouche"></div>
+    <div id="options">
+      <label><input type="checkbox" id="maille"> Afficher les intercommunalités</label>
+      <label><input type="checkbox" id="europe" checked> Régions européennes (NUTS 1)</label>
+      <label><input type="checkbox" id="ecarts"> Estomper les territoires qui restent dans leur région actuelle</label>
+    </div>
   </div>
   <aside id="panneau"></aside>
   <section id="explications"><div id="texte"></div></section>
 </main>
 
 <script>
-// 13 couleurs sans bleu
+// ---- Paramètres à adapter -----------------------------------------------------------
+const AUTEUR = '<a href="https://tfeuillet.github.io/" target="_blank" rel="noopener">Thierry Feuillet</a>, Université de Caen Normandie, <a href="https://umr-idees.fr/" target="_blank" rel="noopener">UMR CNRS IDEES</a>';
+const CONTACT = "thierry.feuillet@unicaen.fr";
+const DEPOT = "https://github.com/VOTRE-COMPTE/regions-france";      // adresse du dépôt GitHub, pour les propositions
+// Fond de carte. Les serveurs d'OpenStreetMap ne sont pas prévus pour un fort trafic. Avant une large diffusion,
+// demander une clé gratuite à un fournisseur de tuiles (CARTO, MapTiler…) et changer cette adresse.
+const FOND = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const CREDITS = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · contours Etalab d\'après IGN, © EuroGeographics · données Insee, Sandre, Eurostat';
+
+// 13 couleurs sans bleu, aussi distinctes que possible
 const PALETTE = ["#c0392b", "#f39c12", "#f2d75c", "#7d5a2b", "#d7b98e", "#1e8449", "#a9d18e",
-                 "#6b8e23", "#7b3294", "#c9a0dc", "#e78ac3", "#9a9a9a", "#f4a582"];
+                 "#4d4d4d", "#7b3294", "#c9a0dc", "#e78ac3", "#b5b5b5", "#8e1b4d"];
 const FRANCE = [[41.3, -5.2], [51.1, 9.6]];
-const PARIS = [[48.1, 1.45], [49.25, 3.56]];
+const POIDS_MAX = 10, NIVEAU_DEFAUT = 2;
 const nb = (x, d = 0) => x.toLocaleString("fr-FR", { maximumFractionDigits: d, minimumFractionDigits: d });
 const pct = x => nb(100 * x) + " %";
 const millions = x => nb(x / 1e6, 1) + " M";
+const milliards = x => nb(x / 1e3, x < 1e4 ? 1 : 0) + " Md€";     // x en millions d'euros
+const mediane = v => { const s = [...v].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const quantile = (v, q) => { const s = [...v].sort((a, b) => a - b); return s[Math.floor(q * (s.length - 1))]; };
+
+// Onglets. Chacun propose un réglage de départ des poids, de 0 (critère ignoré) à 10.
+const SCENARIOS = [
+  { id: "actuelles", titre: "Régions actuelles",
+    texte: "Les treize régions de métropole en vigueur depuis 2016. Chaque intercommunalité est rattachée à la région où vit la majorité de ses habitants. Les curseurs sont sans effet sur cet onglet." },
+  { id: "multi", titre: "Compromis multicritère", poids: { competitivite: 5, solidarite: 3, flux: 3, provinces: 3, compacite: 5, idf: 1 },
+    texte: "Ce réglage combine plusieurs logiques. Les régions doivent peser économiquement en Europe, associer des territoires aisés à d'autres plus modestes, respecter les trajets quotidiens et l'héritage des provinces. Les poids proposés sont un point de départ que vous pouvez modifier." },
+  { id: "competitivite", titre: "Compétitivité économique", poids: { competitivite: 8, compacite: 4, idf: 1 },
+    texte: "C'est l'argument principal de la réforme de 2015. Chaque région doit atteindre un poids économique suffisant pour compter face aux grandes régions européennes, si bien qu'aucune ne reste à la traîne." },
+  { id: "solidarite", titre: "Solidarité riches-pauvres", poids: { solidarite: 6, equilibre: 2, compacite: 6, idf: 1 },
+    texte: "Chaque région associe des territoires aisés et des territoires modestes, pour que son niveau de vie moyen se rapproche de celui du pays. Ce critère est le plus sensible aux réglages, et un léger équilibre démographique l'empêche de produire une région géante." },
+  { id: "flux", titre: "Trajets quotidiens", poids: { flux: 8, compacite: 4, idf: 1 },
+    texte: "Les régions suivent les trajets entre domicile et travail. Elles réunissent les territoires dont les habitants se croisent chaque jour." },
+  { id: "provinces", titre: "Provinces historiques", poids: { provinces: 10 },
+    texte: "Les régions retrouvent les provinces historiques de l'Ancien Régime. Nantes rejoint la Bretagne, la Normandie est réunie et le Languedoc s'étend de Toulouse à Nîmes. L'Île-de-France n'est pas figée dans cet onglet, car ses limites actuelles mêlent plusieurs provinces historiques." },
+  { id: "eau", titre: "Bassins des grands fleuves", poids: { eau: 10 },
+    texte: "Les régions épousent les bassins des grands fleuves, comme la Seine, la Loire, la Garonne ou le Rhône. C'est l'idée qui inspire les « écorégions », sans en reproduire la carte. Avec 8 régions, on retrouve presque exactement les grands bassins des agences de l'eau. Au-delà, il faut en couper certains, et la méthode les découpe le long des fleuves. L'Île-de-France n'est pas figée dans cet onglet, car ses limites actuelles coupent le bassin de la Seine." }
+];
+const PROXIMITES = ["très faible", "faible", "moyenne", "forte", "très forte"];
+const lien = (url, texte) => `<a href="${url}" target="_blank" rel="noopener">${texte}</a>`;
+const WIKI = { gini: "https://fr.wikipedia.org/wiki/Coefficient_de_Gini", polsby: "https://en.wikipedia.org/wiki/Polsby%E2%80%93Popper_test",
+  rand: "https://en.wikipedia.org/wiki/Rand_index", nuts: "https://en.wikipedia.org/wiki/Nomenclature_of_Territorial_Units_for_Statistics" };
+const sansBalises = t => t.replace(/<[^>]+>/g, "");
+// Indicateurs : libellé, valeur, explication (avec liens dans l'onglet Méthode, sans liens dans les infobulles).
+// Ceux qui comparent les régions entre elles laissent la Corse de côté (voir moteur.js).
 const INDICATEURS = [
-  ["population", "Population des régions (min – max)", r => millions(r.pop_min) + " – " + millions(r.pop_max),
-   "Écart entre la région la moins peuplée (la Corse, sauf exception) et la plus peuplée."],
-  ["navettes_internes", "Navettes internes", r => pct(r.navettes_internes),
-   "Part des actifs qui travaillent dans leur région de résidence. Plus elle est élevée, plus les régions correspondent aux espaces vécus."],
-  ["variance_inter_revenu", "Écarts de revenu entre régions", r => pct(r.variance_inter_revenu),
-   "Part des inégalités de niveau de vie entre EPCI qui se retrouve entre les régions (variance inter-régionale). Élevée : régions riches d'un côté, pauvres de l'autre. Faible : chaque région mêle les deux."],
-  ["integrite_bassins", "Intégrité des bassins-versants", r => pct(r.integrite_bassins),
-   "Part de la population vivant dans la région principale de son bassin (région hydrographique). 100 % : aucun bassin n'est coupé par une limite régionale."],
-  ["compacite", "Compacité", r => nb(r.compacite, 2),
-   "Indice de Polsby-Popper moyen (1 = cercle parfait, proche de 0 = formes très étirées ou découpées)."]
+  ["Population des régions (min – max)", r => millions(r.pop_min) + " – " + millions(r.pop_max),
+   "Population de la région la moins peuplée et de la plus peuplée, hors Corse."],
+  ["Régions sous la médiane européenne de PIB", r => r.sous_europe + " sur " + r.n_continent,
+   `Nombre de régions, hors Corse, dont le PIB est inférieur à celui de la grande région européenne médiane (${lien(WIKI.nuts, "NUTS 1")}).`],
+  ["Actifs qui travaillent dans leur région", r => pct(r.navettes),
+   "Part des actifs qui travaillent dans la région où ils habitent. Plus elle est élevée, plus les régions correspondent aux espaces vécus."],
+  ["Écart de niveau de vie entre régions", r => "+ " + pct(r.rapport_revenu - 1),
+   "De combien le niveau de vie de la région la plus aisée dépasse celui de la plus modeste, hors Corse. Le niveau de vie d'une région est ici la moyenne des niveaux de vie médians de ses intercommunalités, chacune pesant sa population. Plus l'écart est faible, plus les régions se ressemblent par leur richesse."],
+  ["Inégalités entre régions (Gini)", r => nb(r.gini, 3),
+   `${lien(WIKI.gini, "Indice de Gini")} des niveaux de vie des régions, hors Corse, chaque région pesant sa population. Il vaut 0 si toutes les régions ont le même niveau de vie et grandit avec les écarts. Contrairement à l'indicateur précédent, il tient compte de toutes les régions et pas seulement des deux extrêmes.`],
+  ["Provinces historiques respectées", r => pct(r.provinces),
+   "Part de la population qui vit dans la région principale de sa province historique. À 100 %, aucune province historique n'est partagée entre deux régions."],
+  ["Bassins des grands fleuves respectés", r => pct(r.bassins),
+   "Part de la population qui vit dans la région principale du bassin de son fleuve. À 100 %, aucun bassin n'est coupé par une limite régionale."],
+  ["Compacité des régions", r => nb(r.compacite, 2),
+   `Moyenne, hors Corse, de l'${lien(WIKI.polsby, "indice de Polsby-Popper")}, qui rapporte la surface d'une région au carré de son périmètre. Il vaut 1 pour un disque et se rapproche de 0 quand les frontières sont longues et tourmentées. Un littoral découpé le fait baisser.`]
 ];
 
-let meta, epci, aretes, decoupages, carte, encart, courant, K;
-const couches = { carte: null, encart: null, aretes: [], etiquettes: null };
+let D, epci, aretes, nuts1, carte, courant = "multi", K, poids = {}, niveau = NIVEAU_DEFAUT, vue, polesCourants;
+const couches = {}, cache = new Map();
 
-Promise.all(["meta", "epci", "aretes", "decoupages"].map(f =>
-    fetch("data/" + f + (f === "epci" || f === "aretes" ? ".geojson" : ".json")).then(r => r.json())))
-  .then(([m, e, a, d]) => { meta = m; epci = e; aretes = a; decoupages = d; demarrer(); })
-  .catch(() => { document.getElementById("panneau").innerHTML =
-    "<p>Données absentes : lancez d'abord <code>Rscript run.R</code> pour créer le dossier <code>docs/data</code>.</p>"; });
+Promise.all(["donnees.json", "epci.geojson", "aretes.geojson", "nuts1.geojson"].map(f => fetch("data/" + f).then(r => r.json())))
+  .then(([d, e, a, n]) => {
+    D = d; epci = e; aretes = a; nuts1 = n;
+    epci.features.forEach((f, i) => { f.properties.i = i; });      // rang de chaque EPCI, pour le retrouver vite
+    try { demarrer(); }
+    catch (erreur) { console.error(erreur);
+      document.getElementById("panneau").innerHTML = "<p>Une erreur empêche l'affichage (" + erreur.message + "). Le détail figure dans la console du navigateur.</p>"; }
+  }, erreur => { console.error(erreur); document.getElementById("panneau").innerHTML =
+    "<p>Les données sont absentes ou illisibles. Il faut d'abord lancer <code>run.R</code> pour créer le dossier <code>docs/data</code>.</p>"; });
+
+// L'onglet, le nombre de régions et les réglages sont inscrits dans l'adresse, si bien qu'un lien renvoie à la même carte
+function ecrireAdresse() {
+  const p = CRITERES.map(c => poids[c.id] || 0).join(",");
+  history.replaceState(null, "", "#o=" + courant + "&k=" + K + (courant === "actuelles" || courant === "aide" ? "" : "&p=" + p + "&r=" + niveau + "&idf=" + (poids.idf ? 1 : 0)));
+  majContribution();
+}
+function lireAdresse() {
+  const a = Object.fromEntries(new URLSearchParams(location.hash.slice(1)));
+  if (D.ks.includes(+a.k)) K = +a.k;
+  if (a.r !== undefined && REGULARITE[+a.r] !== undefined) niveau = +a.r;
+  const id = SCENARIOS.some(s => s.id === a.o) || a.o === "aide" ? a.o : "multi";
+  const p = (a.p || "").split(",").map(Number);
+  const ok = p.length === CRITERES.length && p.every(x => x >= 0 && x <= POIDS_MAX);
+  return { id, idf: a.idf === undefined ? undefined : +a.idf, poids: ok ? Object.fromEntries(CRITERES.map((c, i) => [c.id, p[i]])) : null };
+}
+
+// Propositions d'amélioration : un ticket sur GitHub ou un courriel, avec le lien de la carte affichée
+function majContribution() {
+  const lien = location.href, sujet = "Redessiner les régions : proposition";
+  const corps = "Bonjour,\n\nJe propose l'amélioration suivante :\n\n\n\nCarte concernée : " + lien;
+  const github = DEPOT.includes("VOTRE-COMPTE") ? "" :
+    `<a href="${DEPOT}/issues/new?title=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}" target="_blank" rel="noopener">Ouvrir une proposition sur GitHub</a>`;
+  document.querySelector("#contribuer div").innerHTML = `
+    <p class="petit" style="margin:0 0 6px">Une erreur, une idée, une donnée à ajouter ? Le lien de la carte affichée sera joint au message.</p>
+    ${github}
+    <a href="mailto:${CONTACT}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}">Écrire un courriel à l'auteur</a>`;
+}
+
+// Découpage (un numéro de région par intercommunalité) pour un jeu de poids et le nombre de régions courant
+function decoupage(id, p) {
+  if (id === "actuelles") return D.reg_actuelle;
+  regulariser(niveau);
+  polesCourants = choisirPoles(D, p, K - 1);
+  const cle = JSON.stringify([K, niveau, p.idf ? 1 : 0, CRITERES.map(c => p[c.id] || 0)]);
+  if (!cache.has(cle)) cache.set(cle, regionaliser(D, p, K));
+  return cache.get(cle);
+}
 
 function demarrer() {
-  carte = L.map("carte", { zoomSnap: 0.25, attributionControl: false, preferCanvas: true }).fitBounds(FRANCE);
-  encart = L.map("encart-carte", { zoomSnap: 0.1, attributionControl: false, zoomControl: false, dragging: false,
-    scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false,
-    preferCanvas: true }).fitBounds(PARIS);
-  // les EPCI (colorés selon leur région) puis, par-dessus, les limites entre EPCI voisins
-  couches.carte = L.geoJSON(epci, { onEachFeature: (f, l) =>
-    l.bindTooltip(() => infobulle(epci.features.indexOf(f)), { sticky: true }) }).addTo(carte);
-  couches.encart = L.geoJSON(epci, { interactive: false }).addTo(encart);
-  [carte, encart].forEach(c => {
-    c.createPane("limites").style.zIndex = 450;
-    c.getPane("limites").style.pointerEvents = "none";
-    couches.aretes.push(L.geoJSON(aretes, { pane: "limites", interactive: false,
-      renderer: L.svg({ pane: "limites" }) }).addTo(c));
-  });
+  carte = L.map("carte", { zoomSnap: 0.25, preferCanvas: true }).fitBounds(FRANCE);
+  L.tileLayer(FOND, { maxZoom: 12, attribution: CREDITS }).addTo(carte);
+  // régions européennes NUTS 1 (hors France), sous les régions françaises
+  carte.createPane("europe").style.zIndex = 350;
+  couches.europe = L.geoJSON(nuts1, { pane: "europe", renderer: L.svg({ pane: "europe" }),
+    style: { color: "#3a352c", weight: 1.2, dashArray: "4 3", fillColor: "#fff", fillOpacity: 0.25 },
+    onEachFeature: (f, l) => { const p = f.properties;
+      l.bindTooltip(`<b>${p.nom}</b> (${p.id})<br>${nb(p.pop)} habitants<br>PIB ${milliards(p.pib)}, soit ${nb(1e6 * p.pib / p.pop)} € par habitant`, { sticky: true }); }
+  }).addTo(carte);
+  couches.epci = L.geoJSON(epci, { onEachFeature: (f, l) =>
+    l.bindTooltip(() => infobulle(f.properties.i), { sticky: true }) }).addTo(carte);
+  carte.createPane("limites").style.zIndex = 450;
+  carte.getPane("limites").style.pointerEvents = "none";
+  couches.aretes = L.geoJSON(aretes, { pane: "limites", interactive: false, renderer: L.svg({ pane: "limites" }) }).addTo(carte);
   document.getElementById("maille").onchange = dessiner;
+  document.getElementById("ecarts").onchange = dessiner;
+  document.getElementById("europe").onchange = e => e.target.checked ? couches.europe.addTo(carte) : couches.europe.remove();
 
   const k = document.getElementById("k");
-  k.min = Math.min(...meta.ks); k.max = Math.max(...meta.ks); k.value = K = meta.k_defaut;
-  k.oninput = () => { K = +k.value; courant === "aide" ? expliquer() : dessiner(); };
+  k.min = Math.min(...D.ks); k.max = Math.max(...D.ks); K = D.k_defaut;
+  k.oninput = () => { document.getElementById("k-valeur").textContent = k.value; };          // pendant le glissement, le chiffre seul
+  k.onchange = () => { K = +k.value; courant === "aide" ? expliquer() : dessiner(); };       // au relâchement, le calcul
 
   const nav = document.getElementById("onglets");
-  meta.scenarios.forEach(s => nav.appendChild(bouton(s.titre, () => afficher(s.id), s.id)));
-  nav.appendChild(bouton("Explications", expliquer, "aide")).classList.add("aide");
-  afficher(meta.scenarios.length > 1 ? meta.scenarios[1].id : meta.scenarios[0].id);
+  SCENARIOS.forEach(s => nav.appendChild(bouton(s.titre, () => afficher(s.id), s.id)));
+  nav.appendChild(bouton("Méthode et sources", expliquer, "aide")).classList.add("aide");
+  const depart = lireAdresse();
+  k.value = K;
+  if (depart.id === "aide") { poids = { ...SCENARIOS[1].poids }; expliquer(); }
+  else {
+    afficher(depart.id, true);
+    if (depart.poids && depart.id !== "actuelles") poids = { ...depart.poids, idf: poids.idf };
+    if (depart.idf !== undefined) poids.idf = depart.idf;
+    dessiner();
+  }
 }
 
 function bouton(texte, action, id) {
@@ -160,134 +297,348 @@ function activer(id) {
   document.getElementById("k-valeur").textContent = K;
   document.getElementById("curseur").classList.toggle("inactif", id === "actuelles");
 }
-function afficher(id) {
+function afficher(id, sansDessin) {
+  const sc = SCENARIOS.find(s => s.id === id);
+  if (sc.poids) { poids = { ...sc.poids }; niveau = NIVEAU_DEFAUT; }      // un clic sur l'onglet rétablit ses réglages
   activer(id);
-  carte.invalidateSize(); encart.invalidateSize();
+  carte.invalidateSize();
+  if (!sansDessin) dessiner();
+}
+let avanceOuvert = false;
+function regler(critere, valeur) {      // un curseur a bougé
+  if (critere === "proximite") niveau = +valeur; else poids[critere] = +valeur;      // "idf" vaut 0 ou 1
   dessiner();
 }
 
-// Régions du découpage affiché : population, ville principale, voisines, couleur
-let appartenance = [], region = {};
-function composer() {
-  const P = epci.features.map(f => f.properties);
-  appartenance = decoupages[courant][K];
-  region = {};
-  appartenance.forEach((g, i) => {
-    const r = region[g] || (region[g] = { pop: 0, somme: 0, n: 0, chef: i, voisines: new Set() });
-    r.pop += P[i].pop; r.somme += P[i].pop * P[i].revenu; r.n++;
-    if (P[i].pop > P[r.chef].pop) r.chef = i;
-  });
-  meta.voisins.forEach(([i, j]) => {
-    const a = appartenance[i], b = appartenance[j];
-    if (a !== b) { region[a].voisines.add(b); region[b].voisines.add(a); }
-  });
-  // couleur : liée à la ville principale (stable d'une carte à l'autre), différente des voisines
-  const liste = Object.values(region).sort((a, b) => b.pop - a.pop);
+// Couleurs. Chaque grande ville garde la couleur reçue la première fois, si bien qu'une région conserve
+// sa couleur tant que sa ville principale reste la même. Deux régions voisines n'ont jamais la même.
+const couleurVille = new Map();
+function colorier(v) {
   const prises = new Set();
-  liste.forEach(r => {
-    r.ville = P[r.chef].ville; r.revenu = r.somme / r.pop;
-    const interdites = new Set([...r.voisines].map(v => region[v].couleur).filter(c => c !== undefined));
-    let c = r.chef % PALETTE.length, essais = 0;
-    while ((interdites.has(c) || (prises.size < PALETTE.length && prises.has(c))) && essais++ < PALETTE.length)
-      c = (c + 1) % PALETTE.length;
+  v.regions.forEach(r => {
+    const interdites = new Set([...r.voisines].map(x => v.parId.get(x).couleur).filter(c => c !== undefined));
+    let c = couleurVille.get(r.chef);
+    if (c === undefined || interdites.has(c)) {
+      const usage = PALETTE.map((_, k) => [...couleurVille.values()].filter(x => x === k).length);
+      const possibles = PALETTE.map((_, k) => k).filter(k => !interdites.has(k));
+      const pref = possibles.filter(k => !prises.has(k));
+      c = (pref.length ? pref : possibles).sort((x, y) => usage[x] - usage[y])[0] ?? 0;
+      couleurVille.set(r.chef, c);
+    }
     r.couleur = c; prises.add(c);
   });
-  return liste;
 }
 const infobulle = i => {
-  const p = epci.features[i].properties, r = region[appartenance[i]];
-  return `<b>Région de ${r.ville}</b><br>${nb(r.pop)} habitants · ${r.n} EPCI<br>niveau de vie moyen ${nb(r.revenu)} €<br><span class="petit">${p.nom}</span>`;
+  const r = vue.parId.get(vue.g[i]);
+  return `<b>Région de ${r.ville}</b><br>${nb(r.pop)} habitants, ${r.n} intercommunalités<br>PIB estimé ${milliards(r.pib)}, soit ${nb(r.pibHab)} € par habitant<br>niveau de vie médian ${nb(r.revenu)} € (moyenne des intercommunalités)<br><span class="petit">${D.nom[i]}</span>`;
 };
+
+// Bande de comparaison : les NUTS 1 européens en points gris, les régions de la carte en traits colorés
+function bande(titre, europe, regions, format) {
+  const tout = europe.concat(regions.map(r => r.v)).filter(v => v > 0), min = Math.min(...tout), max = Math.max(...tout);
+  const x = v => 6 + 318 * (Math.log(Math.max(v, min)) - Math.log(min)) / (Math.log(max) - Math.log(min));
+  const med = mediane(europe), sous = regions.filter(r => r.v < quantile(europe, 0.25)).length;
+  return `<div class="bande"><b>${titre}</b>
+    <svg viewBox="0 0 330 50" role="img" aria-label="${titre} des régions de la carte comparé à celui des régions européennes NUTS 1">
+      <line x1="6" x2="324" y1="14" y2="14" stroke="#ddd8cc"/>
+      ${europe.map(v => `<circle cx="${x(v).toFixed(1)}" cy="14" r="3" fill="#6f6a60" fill-opacity=".35"/>`).join("")}
+      <line x1="${x(med)}" x2="${x(med)}" y1="5" y2="23" stroke="#23201b" stroke-width="1.5"/>
+      ${regions.map(r => `<rect x="${(x(r.v) - 1.5).toFixed(1)}" y="25" width="3" height="12" fill="${PALETTE[r.c]}" stroke="#0005" stroke-width=".4"><title>${r.nom} : ${format(r.v)}</title></rect>`).join("")}
+      <text x="6" y="48">${format(min)}</text><text x="324" y="48" text-anchor="end">${format(max)}</text>
+      <text x="${x(med)}" y="48" text-anchor="middle">médiane européenne ${format(med)}</text>
+    </svg>
+    <span class="petit">La médiane des régions de la carte est de ${format(mediane(regions.map(r => r.v)))}, et ${sous} sur ${regions.length} se situent dans le quart inférieur des régions européennes.</span></div>`;
+}
+
+// Curseurs d'un groupe de critères
+function curseurs(liste) {
+  return liste.map(c => `
+      <label for="p-${c.id}" title="${c.aide}" class="${poids[c.id] ? "" : "nul"}" onclick="document.getElementById('a-${c.id}').hidden ^= true">${c.nom}</label>
+      <input type="range" id="p-${c.id}" min="0" max="${POIDS_MAX}" step="1" value="${poids[c.id] || 0}" title="${c.aide}" onchange="regler('${c.id}', this.value)">
+      <b class="${poids[c.id] ? "" : "nul"}">${poids[c.id] || 0}</b>
+      <p class="aide" id="a-${c.id}" hidden>${c.aide}</p>`).join("");
+}
 
 function dessiner() {
   document.getElementById("k-valeur").textContent = K;
-  const sc = meta.scenarios.find(s => s.id === courant);
-  const liste = composer();
-  const maille = document.getElementById("maille").checked;
-  const style = f => {
-    const c = PALETTE[region[appartenance[epci.features.indexOf(f)]].couleur];
-    return { fillColor: c, fillOpacity: 0.9, color: maille ? "#0005" : c, weight: maille ? 0.5 : 1 };
-  };
-  couches.carte.setStyle(style);
-  couches.encart.setStyle(f => ({ ...style(f), color: "#0005", weight: 0.5 }));
-  couches.aretes.forEach(c => c.setStyle(f => {
-    const limite = appartenance[f.properties.i] !== appartenance[f.properties.j];
-    return { color: "#fff", weight: 2.5, opacity: limite ? 1 : 0 };
-  }));
+  const sc = SCENARIOS.find(s => s.id === courant), g = decoupage(courant, poids), fige = courant === "actuelles";
+  vue = decrire(D, g, fige ? null : polesCourants); vue.g = g;
+  colorier(vue);
+  // Comparaison avec les régions actuelles : chaque région de la carte est associée à la région actuelle dont elle
+  // reprend le plus d'habitants. Un territoire « change de région » s'il n'appartient pas à cette région actuelle.
+  const reprise = new Map();
+  D.pop.forEach((p, i) => { let m = reprise.get(g[i]); if (!m) reprise.set(g[i], m = new Map());
+    m.set(D.reg_actuelle[i], (m.get(D.reg_actuelle[i]) || 0) + p); });
+  const associee = new Map([...reprise].map(([r, m]) => [r, [...m].sort((a, b) => b[1] - a[1])[0][0]]));
+  const change = i => !fige && D.reg_actuelle[i] !== associee.get(g[i]);
+  let deplaces = 0, total = 0;
+  D.pop.forEach((p, i) => { total += p; if (change(i)) deplaces += p; });
+  const maille = document.getElementById("maille").checked, ecarts = document.getElementById("ecarts").checked && !fige;
+  couches.epci.setStyle(f => {
+    const c = PALETTE[vue.parId.get(g[f.properties.i]).couleur], o = ecarts && !change(f.properties.i) ? 0.25 : 0.82;
+    return { fillColor: c, fillOpacity: o, color: maille ? "#0006" : c, opacity: maille ? 1 : o, weight: maille ? 0.5 : 1 };
+  });
+  couches.aretes.setStyle(f => ({ color: "#fff", weight: 2.5, opacity: g[f.properties.i] !== g[f.properties.j] ? 1 : 0 }));
   couches.etiquettes && couches.etiquettes.remove();
-  couches.etiquettes = L.layerGroup(liste.map(r => {
-    const p = epci.features[r.chef].properties;
-    return L.marker([p.lat, p.lon], { interactive: false,
-      icon: L.divIcon({ className: "", html: `<div class="etiquette">${r.ville}</div>`, iconSize: [0, 0] }) });
-  })).addTo(carte);
+  couches.etiquettes = L.layerGroup(vue.regions.map(r => L.marker([D.lat[r.chef], D.lon[r.chef]], { interactive: false,
+    icon: L.divIcon({ className: "", html: `<div class="etiquette">${r.ville}</div>`, iconSize: [0, 0] }) }))).addTo(carte);
 
-  const ind = meta.indicateurs.find(r => r.id === courant && r.k === K);
-  const ref = meta.indicateurs.find(r => r.id === "actuelles");
+  // cartouche, pour qu'une capture d'écran reste compréhensible hors de la page
+  const actifs = CRITERES.filter(c => poids[c.id] > 0).map(c => c.nom.toLowerCase() + " " + poids[c.id]);
+  document.getElementById("cartouche").innerHTML = `<b>${sc.titre}, ${vue.ind.n} régions</b><br>
+    ${fige ? "Découpage en vigueur depuis 2016" : (actifs.length ? "Poids sur 10 : " + actifs.join(", ") : "Aucun critère, chaque territoire rejoint le pôle le plus proche") +
+      "<br>Proximité du pôle " + PROXIMITES[niveau] + (poids.idf ? ", Île-de-France à huit départements" : "")}<br>
+    Données du ${D.date}<br>${AUTEUR}<br>${location.host + location.pathname}`;
+  ecrireAdresse();
+
+  const ref = decrire(D, D.reg_actuelle).ind, eu = nuts1.features.map(f => f.properties);
+  const modifie = !fige && (CRITERES.some(c => (poids[c.id] || 0) !== (sc.poids[c.id] || 0)) || niveau !== NIVEAU_DEFAUT || !poids.idf !== !sc.poids.idf);
   document.getElementById("panneau").innerHTML = `
     <h2>${sc.titre}</h2>
-    <p class="logique">${sc.logique}</p>
-    <p>${sc.methode}</p>
-    <p class="petit">Données : ${sc.donnees}</p>
+    <p>${sc.texte}</p>
+    ${fige ? "" : `<h3>Poids des critères</h3>
+    <div class="poids">${curseurs(CRITERES.filter(c => c.groupe === "base"))}</div>
+    <details class="avance" ${avanceOuvert ? "open" : ""} ontoggle="avanceOuvert = this.open">
+      <summary>Réglages avancés</summary>
+      <div class="poids">
+        <p class="sous">Critères supplémentaires</p>
+        ${curseurs(CRITERES.filter(c => c.groupe === "avance" && c.type !== "contrainte"))}
+        <p class="sous">Contraintes</p>
+        ${curseurs(CRITERES.filter(c => c.type === "contrainte"))}
+        <label for="p-proximite" onclick="document.getElementById('a-proximite').hidden ^= true">Proximité du pôle</label>
+        <input type="range" id="p-proximite" min="0" max="${REGULARITE.length - 1}" step="1" value="${niveau}" onchange="regler('proximite', this.value)">
+        <b>${niveau}</b>
+        <p class="aide" id="a-proximite" hidden>Un territoire éloigné du pôle de la région est pénalisé. Plus ce réglage est fort, plus les régions restent groupées autour de leur grande ville et plus les cartes se ressemblent d'un critère à l'autre. Plus il est faible, plus les critères s'expriment librement.</p>
+        <label class="case"><input type="checkbox" ${poids.idf ? "checked" : ""} onchange="regler('idf', this.checked ? 1 : 0)"> Garder l'Île-de-France à huit départements</label>
+        <p class="aide">Paris, les Hauts-de-Seine, la Seine-Saint-Denis, le Val-de-Marne, l'Essonne, les Yvelines, le Val-d'Oise et la Seine-et-Marne forment toujours une région, sans rien gagner ni perdre. Cette contrainte est cochée par défaut, sauf pour les provinces historiques et les bassins des grands fleuves, qui ont leur propre géographie.</p>
+      </div>
+    </details>
+    <p class="petit">Un poids de 0 revient à ignorer le critère. Touchez le nom d'un critère pour lire sa définition.
+      ${modifie ? `<a href="#" onclick="afficher('${courant}'); return false">Revenir au réglage proposé</a>` : ""}</p>
+    <p>Par rapport aux régions actuelles, <b>${pct(deplaces / total)}</b> de la population changerait de région.
+      <span class="petit">Chaque région de la carte est rapprochée de la région actuelle dont elle reprend le plus d'habitants. L'option « Estomper les territoires qui restent dans leur région actuelle », sur la carte, montre où ont lieu ces changements.</span></p>`}
     <h3>Ce que produit ce découpage</h3>
-    <table><tr><th></th><th class="n">${liste.length} régions</th><th class="n">Régions actuelles</th></tr>
-      ${INDICATEURS.map(i => `<tr title="${i[3]}"><td>${i[1]}</td><td class="n"><b>${i[2](ind)}</b></td><td class="n">${ref ? i[2](ref) : ""}</td></tr>`).join("")}
+    <table><tr><th></th><th class="n">${vue.ind.n} régions</th><th class="n">Régions actuelles</th></tr>
+      ${INDICATEURS.map(i => `<tr title="${sansBalises(i[2])}"><td>${i[0]}</td><td class="n"><b>${i[1](vue.ind)}</b></td><td class="n">${i[1](ref)}</td></tr>`).join("")}
     </table>
-    <p class="petit">Survolez une ligne pour sa définition ; détail dans l'onglet Explications.</p>
-    <h3>Les ${liste.length} régions</h3>
-    <table><tr><th>Ville principale</th><th class="n">Population</th><th class="n">Niveau de vie</th></tr>
-      ${liste.map(r => `<tr><td><span class="pastille" style="background:${PALETTE[r.couleur]}"></span>${r.ville}</td><td class="n">${millions(r.pop)}</td><td class="n">${nb(r.revenu)} €</td></tr>`).join("")}
+    <h3>Face aux ${eu.length} grandes régions européennes</h3>
+    ${bande("PIB", eu.map(p => p.pib), vue.regions.map(r => ({ v: r.pib, c: r.couleur, nom: r.ville })), milliards)}
+    ${bande("Population", eu.map(p => p.pop), vue.regions.map(r => ({ v: r.pop, c: r.couleur, nom: r.ville })), millions)}
+    ${bande("PIB par habitant", eu.map(p => 1e6 * p.pib / p.pop), vue.regions.map(r => ({ v: r.pibHab, c: r.couleur, nom: r.ville })), v => nb(v / 1000) + " k€")}
+    <p class="petit">Les points gris sont les régions NUTS 1 des autres pays, sur une échelle logarithmique. Les traits colorés sont les régions de la carte.</p>
+    <h3>Les ${vue.regions.length} régions</h3>
+    <table><tr><th>Pôle</th><th class="n">Population</th><th class="n">PIB</th><th class="n">PIB/hab.</th></tr>
+      ${vue.regions.map(r => `<tr><td><span class="pastille" style="background:${PALETTE[r.couleur]}"></span>${r.ville}</td><td class="n">${millions(r.pop)}</td><td class="n">${milliards(r.pib)}</td><td class="n">${nb(r.pibHab / 1000)} k€</td></tr>`).join("")}
     </table>`;
 }
 
+// Exemple chiffré pour l'onglet « Méthode ». Il s'appuie toujours sur l'onglet « Compromis multicritère », avec ses
+// poids proposés et le nombre de régions choisi. On retient une intercommunalité peuplée, à la frontière de deux
+// régions, dont l'hésitation est la plus serrée possible et qui rejoint bien, sur la carte, la région la mieux notée.
+function exemple() {
+  const sc = SCENARIOS.find(s => s.id === "multi"), pEx = sc.poids, g = decoupage("multi", pEx), poles = polesCourants;
+  let choix = null;
+  for (let i = 0; i < D.pop.length; i++) {
+    if (!D.terre[i] || D.pop[i] < 40000 || poles.includes(i) || (pEx.idf && IDF.includes(D.dep[i]))) continue;
+    const d = g.detail(i);
+    if (d.regions.length < 2) continue;
+    const t = [...d.regions].sort((a, b) => b.total - a.total), ecart = t[0].total - t[1].total;
+    if (t[0].pole !== d.actuelle) continue;
+    if (!choix || ecart < choix.ecart) choix = { i, d, t, ecart };
+  }
+  if (!choix) return "";
+  const { i, d, t } = choix, [a, b] = t, A = "la région de " + D.ville[a.pole], B = "celle de " + D.ville[b.pole];
+  const moy = r => d.actifs.reduce((s, c) => s + d.poids[c] * r.notes[c], 0) / d.somme;
+  const sens = (n, pole) => (n > 0.52 ? "rapprocherait le niveau de vie de la région de " : n < 0.48 ? "éloignerait le niveau de vie de la région de " : "changerait peu le niveau de vie de la région de ")
+    + D.ville[pole] + (n > 0.52 || n < 0.48 ? " de la moyenne nationale" : "");
+  // ce que disent les valeurs de chaque ligne, en clair
+  const lecture = {
+    competitivite: `${A} a déjà un PIB de ${milliards(a.pib)}, ${B} de ${milliards(b.pib)}. ${a.pib < b.pib ? "La première" : "La seconde"} a donc davantage besoin de grandir.`,
+    solidarite: `Le niveau de vie médian de ce territoire est de ${nb(D.revenu[i])} €, pour une moyenne nationale de ${nb(d.revMoyen)} €. Le rattacher ${sens(a.notes.solidarite, a.pole)}, et ${sens(b.notes.solidarite, b.pole)}.`,
+    flux: `Sur l'ensemble des trajets domicile-travail qui relient ce territoire au reste du pays, dans un sens ou dans l'autre, ${pct(a.notes.flux)} se font avec ${A} et ${pct(b.notes.flux)} avec ${B}.`,
+    provinces: `La province historique de ce territoire (${D.province[i]}) regroupe ${pct(a.parts.province)} des habitants de ${A} et ${pct(b.parts.province)} de ceux de ${B}. Le département compte pour le quart restant de la note.`,
+    histoire: `L'ancienne région de ce territoire (${D.anc_region[i]}) regroupe ${pct(a.parts.anc_region)} des habitants de ${A} et ${pct(b.parts.anc_region)} de ceux de ${B}.`,
+    eau: `Le bassin du fleuve de ce territoire (${D.fleuve[i]}) couvre ${pct(a.parts.fleuve)} de ${A} et ${pct(b.parts.fleuve)} de ${B}.`,
+    equilibre: `${A} compte ${millions(a.pop)} d'habitants, ${B} ${millions(b.pop)}, pour une moyenne de ${millions(d.popMoyenne)} par région.`,
+    compacite: `Le territoire touche ${A} sur ${pct(a.contact)} de son pourtour et ${B} sur ${pct(b.contact)}. La note tient aussi compte de la forme de chaque région une fois le territoire rattaché.`
+  };
+  const ligne = c => { const cr = CRITERES.find(x => x.id === c);
+    return `<tr><td>${cr.nom}</td><td class="n">${d.poids[c]}</td><td class="n">${nb(a.notes[c], 2)}</td><td class="n">${nb(b.notes[c], 2)}</td><td class="lecture">${lecture[c][0].toUpperCase() + lecture[c].slice(1)}</td></tr>`; };
+  const reglage = d.actifs.map(c => CRITERES.find(x => x.id === c).nom.toLowerCase() + " " + d.poids[c]).join(", ");
+  return `<div class="exemple">
+    <p><b>Un exemple réel.</b> Il reprend l'onglet « ${sc.titre} », avec ses poids proposés (${reglage}) et ${K} régions, le nombre choisi en haut de la page. L'intercommunalité « ${D.nom[i]} » (${nb(D.pop[i])} habitants) se trouve entre ${A} et ${B}. Voici les notes qu'elle donne à chacune une fois la carte achevée, et ce qu'elles signifient.</p>
+    <div class="defile"><table>
+      <tr><th>Critère</th><th class="n">Poids</th><th class="n">Région de ${D.ville[a.pole]}</th><th class="n">Région de ${D.ville[b.pole]}</th><th>Ce que cela veut dire</th></tr>
+      ${d.actifs.map(ligne).join("")}
+      <tr><td><b>Moyenne pondérée des notes</b></td><td></td><td class="n"><b>${nb(moy(a), 3)}</b></td><td class="n"><b>${nb(moy(b), 3)}</b></td><td class="lecture">Chaque note est multipliée par le poids du critère, et la somme est divisée par le total des poids (étape 4).</td></tr>
+      <tr><td>Pénalité d'éloignement du pôle</td><td></td><td class="n">− ${nb(a.eloignement, 3)}</td><td class="n">− ${nb(b.eloignement, 3)}</td><td class="lecture">Le territoire est à ${nb(a.distance)} km de ${D.ville[a.pole]} et à ${nb(b.distance)} km de ${D.ville[b.pole]} (étape 5).</td></tr>
+      <tr><td><b>Note finale</b></td><td></td><td class="n"><b>${nb(a.total, 3)}</b></td><td class="n"><b>${nb(b.total, 3)}</b></td><td class="lecture">La plus haute l'emporte.</td></tr>
+    </table></div>
+    <p>La note finale de ${A} est la plus haute, et c'est elle que l'intercommunalité rejoint sur la carte. ${moy(a) < moy(b) ? `Sans la pénalité d'éloignement, ${B} l'aurait emporté. ` : ""}L'écart est faible, ce qui explique qu'un petit changement de poids puisse faire basculer un tel territoire.</p>
+  </div>`;
+}
+
 function expliquer() {
-  activer("aide");
-  const ids = meta.ari.id, titre = id => meta.scenarios.find(s => s.id === id).titre;
-  const ari = meta.ari.valeurs[K], lignes = meta.indicateurs.filter(r => r.k === K);
+  activer("aide"); ecrireAdresse();
+  const multi = SCENARIOS.find(s => s.id === "multi").poids;
+  const fixes = SCENARIOS, eu = nuts1.features.map(f => f.properties);
+  const g = fixes.map(s => decoupage(s.id, s.poids || {})), ind = g.map((x, k) => decrire(D, x, fixes[k].poids ? choisirPoles(D, fixes[k].poids, K - 1) : null));
   const vert = v => `background: rgba(30, 132, 73, ${Math.max(0, v) * 0.75})`;
+  const medPop = x => mediane(x.regions.map(r => r.pop)), medPib = x => mediane(x.regions.map(r => r.pib));
+  const P = preparer(D), poles = choisirPoles(D, multi, K - 1);
+  const question = {
+    competitivite: "Cette région a-t-elle encore besoin de grandir pour peser face aux grandes régions européennes ?",
+    solidarite: "Ce territoire rapproche-t-il le niveau de vie de la région de la moyenne nationale ?",
+    flux: "Les trajets domicile-travail de ce territoire se font-ils surtout avec cette région ?",
+    provinces: "Ce territoire appartenait-il à la même province historique que l'essentiel de la région ?",
+    eau: "Ce territoire est-il dans le bassin du même fleuve que l'essentiel de la région ?",
+    histoire: "Ce territoire appartenait-il à la même ancienne région que l'essentiel de la région ?",
+    equilibre: "Cette région est-elle encore peu peuplée ?",
+    compacite: "Ce territoire est-il déjà largement entouré par la région, et la garde-t-il ramassée ?"
+  };
+  const calcul = {
+    competitivite: "La note mesure le besoin de la région. Plus son PIB est encore loin de celui d'une grande région européenne, plus elle a besoin de nouveaux territoires et plus sa note est haute. Le repère est la grande région européenne médiane, dont le PIB est de " + milliards(P.pibEurope) + ". Une région qui ne contient encore que son pôle obtient une note proche de 1, une région qui atteint ce repère obtient 0,5, et une région qui le dépasse deux fois obtient 0,33. Ce sont ainsi les régions les plus faibles qui grandissent en priorité. Formule : 1 / (1 + PIB de la région / PIB médian européen).",
+    solidarite: "La note est élevée quand le rattachement rapproche le niveau de vie moyen de la région de la moyenne nationale, et faible quand il l'en éloigne. Elle reste proche de 0,5 quand le rattachement ne change presque rien.",
+    flux: "On compte les actifs qui habitent l'intercommunalité et travaillent ailleurs, ainsi que ceux qui y travaillent en habitant ailleurs. La note est la part de ces trajets qui relient l'intercommunalité à la région. Si 30 % de ces trajets se font avec des intercommunalités de la région, la note vaut 0,30.",
+    provinces: "Part de la population de la région qui relève de la même province historique que l'intercommunalité, pour les trois quarts de la note, et du même département pour le quart restant.",
+    eau: "Part de la surface de la région située dans le bassin du même grand fleuve, pour la moitié de la note, dans le même bassin d'agence de l'eau, pour 30 %, et dans la même région hydrographique, pour 20 %. Ces trois découpages sont expliqués sous le tableau.",
+    histoire: "Part de la population de la région qui relève de la même ancienne région que l'intercommunalité, pour les trois quarts de la note, et du même département pour le quart restant.",
+    equilibre: "La note vaut 1 pour une région encore vide et 0,5 quand la région atteint la population moyenne d'une région. Elle tombe à 0 quand la région devient deux fois plus peuplée que la moyenne, et le critère cesse alors de l'avantager. Formule : 1 − population de la région / (2 × population moyenne).",
+    compacite: "Moyenne de deux mesures. La première est la part du pourtour de l'intercommunalité qui touche déjà la région. La seconde mesure l'étalement de la région une fois l'intercommunalité rattachée. Elle vaut 1 pour un disque et se rapproche de 0 pour une bande."
+  };
+  const sources = { competitivite: D.sources.emploi + " ; " + D.sources.europe, solidarite: D.sources.revenus, flux: D.sources.flux,
+    provinces: D.sources.provinces, eau: D.sources.eau, histoire: D.sources.histoire, equilibre: D.sources.epci, compacite: D.sources.epci };
+  const tableCriteres = liste => `<div class="defile"><table>
+      <tr><th>Critère</th><th>Question posée</th><th>Calcul de la note, entre 0 et 1</th><th>Données</th></tr>
+      ${liste.map(c => `<tr><td><b>${c.nom}</b></td><td>${question[c.id]}</td><td>${calcul[c.id]}</td><td class="petit">${sources[c.id]}</td></tr>`).join("")}
+    </table></div>`;
+  const lien2016 = "#o=multi&k=13&p=" + CRITERES.map(c => ({ competitivite: 5, histoire: 5, compacite: 2 })[c.id] || 0).join(",") + "&r=" + NIVEAU_DEFAUT + "&idf=1";
+  const parametres = [
+    ["Pénalité d'éloignement du pôle", "0,08 par rayon moyen", "Le rayon moyen est celui d'un disque ayant la surface d'une région moyenne. Avec cette valeur, un territoire situé à deux rayons du pôle perd 0,16 point, de quoi écarter les régions étirées sur des centaines de kilomètres sans étouffer les critères. C'est le niveau « moyen » du réglage avancé « Proximité du pôle », qui va de 0,02 à 0,16.", "0,04 et 0,16 (0,89)"],
+    ["Effacement de la pénalité", "proportionnel", "La pénalité est multipliée par la part des poids qui ne vont ni aux provinces historiques, ni aux anciennes régions, ni aux fleuves. Ces critères dessinent déjà des ensembles d'un seul tenant, et la pénalité les empêcherait de suivre une province ou un bassin allongés.", ""],
+    ["Taille minimale prioritaire", "15 % de la population moyenne", "Une région qui n'a pas atteint ce seuil grandit avant les autres. Sans cette règle, un pôle peut être encerclé par ses voisins avant d'avoir grandi. Le seuil est bas pour ne pas imposer l'égalité des populations, qui relève du critère d'équilibre démographique.", "5 % et 30 % (0,98)"],
+    ["Villes candidates au rôle de pôle", "les 150 plus grandes", "Ce nombre dépasse largement les 21 pôles du plus grand découpage, et laisse leur chance aux villes moyennes des régions peu urbanisées.", "75 et 300 (0,99)"],
+    ["Choix des pôles", "taille × population captée<sup>1/2</sup> × distance<sup>1/3</sup>", "La taille de la ville compte le plus, la population qu'elle pourrait attirer ensuite, l'éloignement des autres pôles en dernier. Des exposants plus forts feraient choisir de petites villes isolées, des exposants plus faibles des pôles trop voisins.", "1/4 à 3/4 (0,97) et 1/6 à 1/2 (0,95)"],
+    ["Pôles d'une même province historique ou d'un même bassin", "écartés à 99,9 %", "Quand seuls ces critères comptent, une ville qui partage la province historique ou le bassin d'un pôle n'est presque jamais choisie. L'exclusion diminue avec le poids de ces critères et disparaît quand ils sont nuls.", ""],
+    ["Province historique et département", "3/4 et 1/4", "La province historique décide. Le département départage les territoires d'une province coupée entre deux régions et évite de séparer un département sans raison. Les anciennes régions suivent la même règle.", ""],
+    ["Fleuve, agence de l'eau, région hydrographique", "50 %, 30 % et 20 %", "Le bassin du grand fleuve traduit le mieux l'idée d'un territoire uni par l'eau, et compte pour moitié. Le bassin d'agence reflète la gestion actuelle de l'eau. La région hydrographique départage les territoires d'un même grand bassin.", ""],
+    ["Repère européen", milliards(P.pibEurope), "C'est le PIB de la grande région européenne médiane (NUTS 1, hors France). Il ne fixe que l'échelle de la note de compétitivité, qui vaut 0,5 à ce niveau.", ""],
+    ["Population de référence", "2 × population moyenne", "Avec ce facteur, la note d'équilibre vaut 0,5 à la population moyenne, comme celle de compétitivité au repère européen. Les deux critères ont ainsi des échelles comparables.", ""],
+    ["Sensibilité de la solidarité", "facteur 20", "La note dépend du gain de la région en direction de la moyenne nationale, exprimé en écarts-types des niveaux de vie. Le facteur 20 la rend sensible dès qu'un territoire déplace un peu la moyenne d'une région, puis la plafonne pour les gains importants.", ""],
+    ["Retouches des frontières", "marge de 0,02, 10 passes au plus", "Un territoire ne change de région que si sa note y gagne au moins 0,02. Cette marge l'empêche d'osciller entre deux régions presque à égalité. En pratique, les retouches s'arrêtent après quelques passes.", "marge de 0,005 et 0,05 (0,98), de 0 à 30 passes (0,98)"]
+  ];
+
   document.getElementById("texte").innerHTML = `
     <h2>Le principe</h2>
-    <p>Une région peut se définir de bien des façons : par ce qui se ressemble, par ce qui échange, par ce qui dépend d'une même ville ou d'un même fleuve. Cette carte part des ${epci.features.length} intercommunalités (EPCI) de France métropolitaine et les regroupe en régions d'un seul tenant, en changeant chaque fois le critère de regroupement. Le curseur fixe le nombre de régions, de ${Math.min(...meta.ks)} à ${Math.max(...meta.ks)} ; il y en a 13 aujourd'hui en métropole (18 avec l'outre-mer, non traité ici). La Corse, île, forme toujours une région à elle seule.</p>
-    <p>La proposition de régions calquées sur les bassins-versants (« écorégions ») correspond à l'onglet Eau. Les autres onglets montrent ce que donnerait la même logique appliquée à d'autres critères. Aucun découpage n'est « le bon » : chacun optimise un objectif et en sacrifie d'autres, ce que mesurent les indicateurs ci-dessous.</p>
+    <p>Il existe bien des façons de définir une région. On peut réunir des territoires qui pèsent ensemble dans l'économie européenne, mêler des territoires riches et pauvres, suivre les trajets quotidiens des habitants, ou respecter l'histoire et la géographie physique. Cette carte permet d'essayer chacune de ces logiques, seule ou combinée avec d'autres, et de comparer ce qu'elles produisent.</p>
+    <p>Aucune de ces cartes n'est la bonne. Chacune privilégie un objectif au détriment des autres, et les indicateurs servent à mesurer ce qu'elle y gagne et ce qu'elle y perd. Ce sont des simulations, et non une proposition de réforme.</p>
 
-    <h2>Critères et méthodes</h2>
+    <h2>Comment la carte est construite, étape par étape</h2>
+
+    <h3>1. On part des intercommunalités</h3>
+    <p>La carte assemble les ${D.pop.length} intercommunalités (communautés de communes, d'agglomération, urbaines et métropoles) de France métropolitaine. Elles sont les briques de base, et une intercommunalité n'est jamais coupée entre deux régions. La Corse, qui est une île, forme toujours une région à elle seule. L'outre-mer n'est pas traité.</p>
+
+    <h3>2. On choisit une grande ville par région</h3>
+    <p>Chaque région se construit autour d'une ville, appelée pôle. Le premier pôle est la plus grande ville du pays. Les suivants sont choisis un à un. À chaque fois, on retient la ville qui est à la fois importante, éloignée des pôles déjà choisis, et entourée d'une population nombreuse qu'elle pourrait attirer. La taille d'une ville combine la population de sa commune et celle de son intercommunalité.</p>
+    <p>Deux pôles donnent toujours deux régions différentes. Si l'on prenait comme pôles Paris et Rouen, le bassin de la Seine serait forcément coupé en deux. Quand les provinces historiques, les anciennes régions ou les fleuves comptent, une ville qui partage la province historique ou le bassin d'un pôle déjà choisi ne devient donc pas pôle à son tour. Elle n'est pas exclue pour autant, puisqu'elle rejoindra ensuite la région de ce pôle, avec le reste de sa province ou de son bassin. Avec les bassins des grands fleuves, Rouen ne devient pas pôle et rejoint la région de Paris.</p>
+    <p>La contrainte Île-de-France, cochée par défaut sauf pour les provinces historiques et les bassins des grands fleuves, fait de Paris le premier pôle. Sa région reçoit d'emblée les huit départements franciliens, sans pouvoir en gagner ni en perdre, et aucune autre ville d'Île-de-France ne peut devenir pôle.</p>
+    <p>Pour ${K} régions et l'onglet « Compromis multicritère », les pôles sont ${poles.map(p => D.ville[p]).join(", ")}, auxquels s'ajoute la Corse.</p>
+
+    <h3>3. Chaque critère attribue une note</h3>
+    <p>Pour décider où va une intercommunalité, chaque critère pose une question et y répond par une note comprise entre 0 et 1. La note est d'autant plus haute que la région convient à l'intercommunalité selon ce critère.</p>
+    ${tableCriteres(CRITERES.filter(c => c.groupe === "base"))}
+    <p><b>Bassin-versant, région hydrographique et bassin d'agence.</b> Un bassin-versant est l'ensemble des terres dont les eaux s'écoulent vers un même point, ici l'embouchure d'un fleuve. Le ${lien("https://www.sandre.eaufrance.fr/", "Sandre")}, service public de référence pour les données sur l'eau, divise la France en régions hydrographiques, désignées chacune par une lettre. Une région hydrographique couvre une partie du bassin d'un grand fleuve (la Loire en compte trois, de sa source à l'estuaire) ou un ensemble de petits fleuves côtiers voisins. La carte réunit les régions hydrographiques qui se jettent dans le même fleuve pour former le bassin de ce fleuve. Les bassins des ${lien("https://www.lesagencesdeleau.fr/", "agences de l'eau")}, enfin, sont des circonscriptions administratives plus vastes, qui associent plusieurs fleuves. Le bassin Loire-Bretagne comprend ainsi la Loire, la Vilaine et les fleuves côtiers bretons et vendéens.</p>
+    <p>Les réglages avancés ajoutent deux critères et une contrainte de forme, qui fonctionnent de la même manière.</p>
+    ${tableCriteres(CRITERES.filter(c => c.groupe === "avance"))}
+
+    <h3>4. Les notes sont combinées selon les poids</h3>
+    <p>Chaque note est multipliée par le poids du critère, choisi entre 0 et 10 avec les curseurs, puis on calcule la moyenne. Un critère de poids 0 est ignoré. Seuls les rapports entre les poids comptent, si bien que mettre tous les poids à 5 ou tous à 10 donne la même carte.</p>
+
+    <h3>5. Les territoires éloignés de leur pôle sont pénalisés</h3>
+    <p>On retire de la note une petite pénalité qui grandit avec la distance entre l'intercommunalité et le pôle de la région. Sans elle, une région pourrait s'étirer sur des centaines de kilomètres pour satisfaire un critère. Le réglage avancé « Proximité du pôle » fixe la force de cette pénalité. Elle s'efface quand les provinces historiques, les anciennes régions ou les fleuves dominent, puisque ces critères dessinent déjà des ensembles cohérents.</p>
+    ${exemple()}
+
+    <h3>6. Les régions grandissent une intercommunalité à la fois</h3>
+    <p>Au départ, chaque région ne contient que son pôle. À chaque étape, on examine toutes les intercommunalités encore libres qui touchent une région, avec toutes les régions qu'elles touchent. On réalise le rattachement qui obtient la meilleure note finale, puis on recommence jusqu'à ce que toutes les intercommunalités soient placées. Comme une intercommunalité ne peut rejoindre qu'une région qu'elle touche, chaque région est d'un seul tenant. Pour éviter les régions minuscules, une région qui n'a pas encore atteint 15 % de la population moyenne d'une région passe en priorité.</p>
+
+    <h3>7. Les frontières sont retouchées</h3>
+    <p>Comme les régions grandissent pas à pas, une intercommunalité placée tôt peut se révéler mal rattachée une fois la carte achevée. Il en résulte parfois des frontières tortueuses, avec des avancées ou des territoires presque enclavés. On reprend donc chaque intercommunalité de frontière et on lui fait changer de région si une région voisine lui donne une meilleure note, à condition de ne pas couper en deux la région qu'elle quitte. On répète l'opération jusqu'à ce que plus rien ne bouge.</p>
+
+    <h3>8. On mesure le résultat</h3>
+    <p>Chaque carte est enfin décrite par des indicateurs, présentés ci-dessous et dans le panneau de droite. Ils permettent de vérifier ce que le découpage gagne et ce qu'il sacrifie. Ceux qui comparent les régions entre elles laissent la Corse de côté. Elle forme une région dans tous les scénarios, avec sa propre collectivité, et sa petite taille fixerait à elle seule le minimum de population ou de PIB.</p>
+
+    <h2>Les paramètres fixés et leur justification</h2>
+    <p>La méthode repose sur quelques valeurs fixées à l'avance. Elles ont été choisies en comparant les cartes obtenues sur les données réelles, puis vérifiées par la <a href="robustesse.html">page de tests</a>, qui fait varier chacune d'elles et mesure la ressemblance des cartes avec l'${lien(WIKI.rand, "indice de Rand ajusté")}. Lors de la mise au point, sur les onglets proposés et pour 9, 13 et 18 régions, cet indice valait en moyenne entre 0,89 et 0,99 selon le paramètre, ce qui veut dire que les cartes changent peu. Les écarts les plus nets, autour de 0,7, concernent surtout l'onglet « Solidarité riches-pauvres » et la pénalité d'éloignement, que l'on peut justement régler dans les réglages avancés.</p>
     <div class="defile"><table>
-      <tr><th>Onglet</th><th>Logique</th><th>Méthode de régionalisation</th><th>Données</th></tr>
-      ${meta.scenarios.map(s => `<tr><td><b>${s.titre}</b></td><td>${s.logique}</td><td>${s.methode}</td><td>${s.donnees}</td></tr>`).join("")}
+      <tr><th>Paramètre</th><th>Valeur</th><th>Pourquoi</th><th>Variantes testées (ressemblance moyenne)</th></tr>
+      ${parametres.map(([n, v, j, t]) => `<tr><td><b>${n}</b></td><td>${v}</td><td>${j}</td><td class="petit">${t || "·"}</td></tr>`).join("")}
     </table></div>
-    <p>Deux familles d'algorithmes sont utilisées. <b>SKATER</b> (Assunção et al., 2006) relie les EPCI voisins par un arbre couvrant minimal, puis coupe les liens entre voisins les plus dissemblables : il produit des régions contiguës et homogènes, ici avec une population minimale de ${millions(meta.pop_min)} d'habitants. Ses découpages sont emboîtés : passer de 13 à 14 régions revient à couper une région en deux. Les <b>fusions successives</b> partent d'autant de régions que d'unités de départ ; à chaque étape, la région la moins peuplée fusionne avec la voisine qui répond le mieux au critère, jusqu'à obtenir le nombre voulu ; ces découpages sont donc emboîtés eux aussi. Cette règle garantit la contiguïté et limite les déséquilibres de population.</p>
+
+    <h2>Les réglages proposés dans chaque onglet</h2>
+    <div class="defile"><table>
+      <tr><th>Onglet</th>${CRITERES.map(c => `<th class="n">${c.nom}</th>`).join("")}<th class="n">Île-de-France à huit départements</th></tr>
+      ${fixes.filter(s => s.poids).map(s => `<tr><td><b>${s.titre}</b></td>${CRITERES.map(c => `<td class="n">${s.poids[c.id] || "·"}</td>`).join("")}<td class="n">${s.poids.idf ? "oui" : "non"}</td></tr>`).join("")}
+    </table></div>
+    <p>La réforme de 2015 a cherché des régions de taille européenne en réunissant d'anciennes régions entières. On peut reproduire cette logique en combinant la compétitivité économique et les anciennes régions, comme dans <a href="${lien2016}" onclick="setTimeout(() => location.reload(), 0)">ce réglage</a>, puis comparer le résultat aux régions actuelles.</p>
 
     <h2>Comparaison des découpages en ${K} régions</h2>
     <div class="defile"><table>
-      <tr><th>Découpage</th>${INDICATEURS.map(i => `<th class="n">${i[1]}</th>`).join("")}</tr>
-      ${lignes.map(r => `<tr><td><b>${titre(r.id)}</b></td>${INDICATEURS.map(i => `<td class="n">${i[2](r)}</td>`).join("")}</tr>`).join("")}
+      <tr><th>Découpage</th>${INDICATEURS.map(i => `<th class="n">${i[0]}</th>`).join("")}</tr>
+      ${fixes.map((s, k) => `<tr><td><b>${s.titre}</b></td>${INDICATEURS.map(i => `<td class="n">${i[1](ind[k].ind)}</td>`).join("")}</tr>`).join("")}
     </table></div>
-    <ul>${INDICATEURS.map(i => `<li><b>${i[1]}.</b> ${i[3]}</li>`).join("")}</ul>
+    ${INDICATEURS.map(i => `<p><b>${i[0]}.</b> ${i[2]}</p>`).join("")}
+
+    <h2>Comparaison européenne</h2>
+    <p>Les régions de la carte sont comparées aux ${eu.length} grandes régions (${lien(WIKI.nuts, "NUTS 1")}) des autres pays européens, tracées en pointillés sur la carte. Leur population médiane est de ${millions(mediane(eu.map(p => p.pop)))} d'habitants et leur PIB médian de ${milliards(mediane(eu.map(p => p.pib)))}.</p>
+    <div class="defile"><table>
+      <tr><th>Découpage en ${K} régions</th><th class="n">Population médiane</th><th class="n">PIB médian</th><th class="n">Régions sous la médiane européenne de PIB, hors Corse</th></tr>
+      ${fixes.map((s, k) => `<tr><td><b>${s.titre}</b></td><td class="n">${millions(medPop(ind[k]))}</td><td class="n">${milliards(medPib(ind[k]))}</td><td class="n">${ind[k].ind.sous_europe} sur ${ind[k].ind.n_continent}</td></tr>`).join("")}
+    </table></div>
+    <p>Cette comparaison reste indicative, car les NUTS 1 recouvrent des réalités très différentes d'un pays à l'autre. Les Länder allemands disposent de compétences étendues, alors que d'autres pays n'y voient qu'un regroupement statistique. Par ailleurs, le PIB n'est pas mesuré à l'échelle des intercommunalités. Celui de chaque département, fourni par Eurostat, est réparti entre ses intercommunalités en proportion de l'emploi salarié. Cette estimation convient pour de grandes régions et devient plus fragile pour les petites.</p>
 
     <h2>Ressemblance entre découpages en ${K} régions</h2>
-    <p>Indice de Rand ajusté : 1 si deux découpages classent les EPCI exactement de la même façon, 0 s'ils ne se ressemblent pas plus que deux découpages tirés au hasard.</p>
+    <p>L'${lien(WIKI.rand, "indice de Rand ajusté")} vaut 1 lorsque deux découpages placent les intercommunalités exactement de la même façon. Il vaut 0 lorsqu'ils ne se ressemblent pas plus que deux découpages tirés au hasard.</p>
     <div class="defile"><table>
-      <tr><th></th>${ids.map(i => `<th class="n">${titre(i)}</th>`).join("")}</tr>
-      ${ids.map((a, i) => `<tr><td><b>${titre(a)}</b></td>${ids.map((b, j) => `<td class="n" style="${vert(ari[i][j])}">${nb(ari[i][j], 2)}</td>`).join("")}</tr>`).join("")}
+      <tr><th></th>${fixes.map(s => `<th class="n">${s.titre}</th>`).join("")}</tr>
+      ${fixes.map((a, i) => `<tr><td><b>${a.titre}</b></td>${fixes.map((b, j) => { const v = randAjuste(g[i], g[j]); return `<td class="n" style="${vert(v)}">${nb(v, 2)}</td>`; }).join("")}</tr>`).join("")}
     </table></div>
+    <p>Les cartes partagent souvent les mêmes pôles, ce qui les rapproche. Baisser la proximité du pôle, dans les réglages avancés, laisse les critères s'exprimer davantage. Sur la carte, l'option « Estomper les territoires qui restent dans leur région actuelle » fait ressortir ceux qu'un réglage déplace.</p>
 
-    <h2>Métadonnées</h2>
+    <h2>Robustesse</h2>
+    <p>Une <a href="robustesse.html">page de tests</a> recalcule l'ensemble des découpages. Elle recherche les cartes aberrantes pour chaque onglet et chaque nombre de régions, puis mesure de combien les cartes changent quand on déplace un poids d'un cran ou quand on modifie les paramètres fixés présentés plus haut.</p>
+
+    <h2>Sources et métadonnées</h2>
     <table>
-      <tr><td>Dernière mise à jour des données</td><td>${meta.date}</td></tr>
-      <tr><td>Maille</td><td>${meta.sources.epci}</td></tr>
-      <tr><td>Eau</td><td>${meta.sources.eau}</td></tr>
-      <tr><td>Revenus</td><td>${meta.sources.revenus}</td></tr>
-      <tr><td>Emploi</td><td>${meta.sources.emploi}</td></tr>
-      <tr><td>Navettes</td><td>${meta.sources.flux}</td></tr>
-      <tr><td>Appartenance de chaque EPCI (tous découpages)</td><td><a href="data/epci_regions.csv">epci_regions.csv</a></td></tr>
+      <tr><td>Dernière mise à jour des données</td><td>${D.date}</td></tr>
+      <tr><td>Intercommunalités</td><td>${D.sources.epci}</td></tr>
+      <tr><td>Revenus</td><td>${D.sources.revenus}</td></tr>
+      <tr><td>Emploi</td><td>${D.sources.emploi}</td></tr>
+      <tr><td>Trajets domicile-travail</td><td>${D.sources.flux}</td></tr>
+      <tr><td>Provinces historiques</td><td>${D.sources.provinces}</td></tr>
+      <tr><td>Anciennes régions</td><td>${D.sources.histoire}</td></tr>
+      <tr><td>Fleuves</td><td>${D.sources.eau}</td></tr>
+      <tr><td>Europe</td><td>${D.sources.europe}</td></tr>
+      <tr><td>Fond de carte</td><td>© contributeurs ${lien("https://www.openstreetmap.org/copyright", "OpenStreetMap")}</td></tr>
+      <tr><td>Valeurs manquantes</td><td>${D.sources.controle || "non renseigné"}</td></tr>
     </table>
+
+    <h2>Auteur, citation et contributions</h2>
+    <p>${AUTEUR}.</p>
+    <p>Pour citer cette carte, on peut écrire : Feuillet T. (${D.date.slice(0, 4)}). <i>Redessiner les régions françaises</i>. Université de Caen Normandie, UMR CNRS IDEES. ${location.origin + location.pathname}, données du ${D.date}.</p>
+    <p>Les remarques, corrections et idées sont les bienvenues. Le bouton « Proposer une amélioration », en haut de la page, permet d'<a href="mailto:${CONTACT}">écrire à l'auteur</a>${DEPOT.includes("VOTRE-COMPTE") ? "" : ` ou d'ouvrir une proposition sur le <a href="${DEPOT}/issues" target="_blank" rel="noopener">dépôt GitHub</a>`}, avec le lien de la carte affichée.</p>
 
     <h2>Limites</h2>
     <ul>
-      <li>Les régions portent le nom de leur commune la plus peuplée : c'est un repère de lecture, pas une proposition de chef-lieu.</li>
-      <li>Les EPCI ne suivent pas les lignes de partage des eaux : chacun est rattaché en entier à son bassin dominant.</li>
-      <li>Les algorithmes sont des heuristiques : ils donnent un bon découpage pour le critère, pas nécessairement le meilleur possible. La population minimale est un choix.</li>
-      <li>Outre-mer non traité. Les quelques communes hors EPCI (îles) sont absentes.</li>
-      <li>Le niveau de vie moyen d'une région est la moyenne des médianes de ses EPCI, pondérée par la population.</li>
+      <li>La maille de départ n'est pas neutre. Les intercommunalités sont elles-mêmes des constructions politiques de tailles très inégales, et beaucoup chevauchent deux bassins ou deux provinces historiques.</li>
+      <li>Organiser chaque région autour d'une grande ville est une hypothèse forte qui pèse sur toutes les cartes. Deux pôles forment toujours deux régions distinctes, si bien que le choix des pôles décide d'une partie du résultat. La règle qui les désigne est simple et peut se discuter.</li>
+      <li>La méthode procède par étapes et ne garantit pas le meilleur découpage possible pour des poids donnés. Un petit changement de poids peut faire basculer un territoire disputé entre deux pôles, comme le montre l'exemple de l'étape 5.</li>
+      <li>La compétitivité est réduite ici à une question de poids économique, mesuré par le PIB. Elle ne tient compte ni de la spécialisation des territoires, ni de l'innovation, ni des réseaux de transport.</li>
+      <li>Le niveau de vie d'une région est approché par la moyenne des niveaux de vie médians de ses intercommunalités. Ce n'est pas la médiane régionale exacte, que l'on ne peut pas recalculer sans les données individuelles.</li>
+      <li>Les provinces historiques sont approchées par la province dominante de chaque département. Leurs limites réelles ne suivaient pas celles des départements, et l'Aisne ou l'Oise, par exemple, relevaient de plusieurs provinces. Ce critère rend compte d'un héritage et ne mesure pas un sentiment d'appartenance actuel.</li>
+      <li>Le bassin d'un grand fleuve réunit toutes les régions hydrographiques qui s'y jettent. Les petits fleuves côtiers de Bretagne, de Normandie ou de la Méditerranée forment des ensembles à part. Ceux de la Méditerranée sont coupés en deux par le delta du Rhône, entre le Languedoc-Roussillon et la Provence. Le bassin français de la Meuse est coupé en deux par la Belgique, ce qui peut isoler la région de Maubeuge. Chaque intercommunalité est rattachée en entier à son bassin dominant.</li>
+      <li>La contrainte Île-de-France reprend les huit départements de la région depuis leur création en 1968. Elle évite de découper l'agglomération parisienne au gré des réglages, mais elle impose une région que les critères n'auraient pas forcément dessinée ainsi. On peut la décocher dans les réglages avancés.</li>
+      <li>Les régions portent le nom de leur pôle pour faciliter la lecture. Il ne s'agit pas d'une proposition de chef-lieu.</li>
+      <li>L'outre-mer n'est pas traité, et les quelques communes insulaires qui n'appartiennent à aucune intercommunalité sont absentes.</li>
     </ul>`;
 }
 </script>

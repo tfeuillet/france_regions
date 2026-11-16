@@ -1,0 +1,36 @@
+name: Mise à jour des données
+
+on:
+  workflow_dispatch:        # bouton « Run workflow » dans l'onglet Actions
+  schedule:
+    - cron: "17 4 1 * *"    # le 1er de chaque mois
+
+permissions:
+  contents: write
+
+jobs:
+  maj:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::sf
+            any::dplyr
+            any::spdep
+            any::jsonlite
+            any::data.table
+            any::melodi
+            any::rmapshaper
+      - run: Rscript run.R
+      - name: Enregistrer la carte mise à jour
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add docs/data
+          git diff --cached --quiet || git commit -m "Mise à jour automatique des données"
+          git push

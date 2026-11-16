@@ -1,0 +1,5 @@
+data/brut/
+data/epci.gpkg
+data/flux.rds
+.Rhistory
+.Rproj.user

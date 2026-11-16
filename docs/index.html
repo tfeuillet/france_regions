@@ -532,10 +532,10 @@ function expliquer() {
 
   document.getElementById("texte").innerHTML = `
     <h2>Le principe</h2>
-    <p>Il existe bien des façons de définir une région. On peut réunir des territoires qui pèsent ensemble dans l'économie européenne, mêler des territoires riches et pauvres, suivre les trajets quotidiens des habitants, ou respecter l'histoire et la géographie physique. Cette carte permet d'essayer chacune de ces logiques, seule ou combinée avec d'autres, et de comparer ce qu'elles produisent.</p>
-    <p>Aucune de ces cartes n'est la bonne. Chacune privilégie un objectif au détriment des autres, et les indicateurs servent à mesurer ce qu'elle y gagne et ce qu'elle y perd. Ce sont des simulations, et non une proposition de réforme.</p>
+    <p>Il existe de multiples façons de définir une région. On peut réunir des territoires de manière à ce qu'ils soient compétitifs dans l'économie européenne, associer des territoires riches et pauvres pour limiter les inégalités, s'appuyer sur des critères fonctionnels comme les trajets domicile-travail, ou respecter l'histoire et la géographie physique. Cet outil interactif permet de tester chacune de ces logiques, seule ou combinée avec d'autres, et de comparer ce qu'elles produisent.</p>
+    <p>Aucune de ces cartes n'est idéale. Chacune privilégie un objectif au détriment des autres, et les indicateurs servent à mesurer ce qu'elle y gagne et ce qu'elle y perd. </p>
 
-    <h2>Comment la carte est construite, étape par étape</h2>
+    <h2>Comment l'outil fonctionne</h2>
 
     <h3>1. On part des intercommunalités</h3>
     <p>La carte assemble les ${D.pop.length} intercommunalités (communautés de communes, d'agglomération, urbaines et métropoles) de France métropolitaine. Elles sont les briques de base, et une intercommunalité n'est jamais coupée entre deux régions. La Corse, qui est une île, forme toujours une région à elle seule. L'outre-mer n'est pas traité.</p>
@@ -570,7 +570,7 @@ function expliquer() {
     <p>Chaque carte est enfin décrite par des indicateurs, présentés ci-dessous et dans le panneau de droite. Ils permettent de vérifier ce que le découpage gagne et ce qu'il sacrifie. Ceux qui comparent les régions entre elles laissent la Corse de côté. Elle forme une région dans tous les scénarios, avec sa propre collectivité, et sa petite taille fixerait à elle seule le minimum de population ou de PIB.</p>
 
     <h2>Les paramètres fixés et leur justification</h2>
-    <p>La méthode repose sur quelques valeurs fixées à l'avance. Elles ont été choisies en comparant les cartes obtenues sur les données réelles, puis vérifiées par la <a href="robustesse.html">page de tests</a>, qui fait varier chacune d'elles et mesure la ressemblance des cartes avec l'${lien(WIKI.rand, "indice de Rand ajusté")}. Lors de la mise au point, sur les onglets proposés et pour 9, 13 et 18 régions, cet indice valait en moyenne entre 0,89 et 0,99 selon le paramètre, ce qui veut dire que les cartes changent peu. Les écarts les plus nets, autour de 0,7, concernent surtout l'onglet « Solidarité riches-pauvres » et la pénalité d'éloignement, que l'on peut justement régler dans les réglages avancés.</p>
+    <p>La méthode repose sur quelques paramètres fixés à l'avance. Ils ont été choisis en comparant les cartes obtenues, puis vérifiées par la <a href="robustesse.html">page de tests</a>, qui fait varier chacune d'elles et mesure la ressemblance des cartes avec l'${lien(WIKI.rand, "indice de Rand ajusté")}. Lors de la mise au point, sur les onglets proposés et pour 9, 13 et 18 régions, cet indice valait en moyenne entre 0,89 et 0,99 selon le paramètre, ce qui veut dire que les cartes changent peu. Les écarts les plus nets, autour de 0,7, concernent surtout l'onglet « Solidarité riches-pauvres » et la pénalité d'éloignement, que l'on peut justement régler dans les réglages avancés.</p>
     <div class="defile"><table>
       <tr><th>Paramètre</th><th>Valeur</th><th>Pourquoi</th><th>Variantes testées (ressemblance moyenne)</th></tr>
       ${parametres.map(([n, v, j, t]) => `<tr><td><b>${n}</b></td><td>${v}</td><td>${j}</td><td class="petit">${t || "·"}</td></tr>`).join("")}
@@ -626,13 +626,13 @@ function expliquer() {
 
     <h2>Auteur, citation et contributions</h2>
     <p>${AUTEUR}.</p>
-    <p>Pour citer cette carte, on peut écrire : Feuillet T. (${D.date.slice(0, 4)}). <i>Redessiner les régions françaises</i>. Université de Caen Normandie, UMR CNRS IDEES. ${location.origin + location.pathname}, données du ${D.date}.</p>
+    <p>Pour citer cet outil : Feuillet T. (${D.date.slice(0, 4)}). <i>Redessiner les régions françaises</i>. Université de Caen Normandie, UMR CNRS IDEES. ${location.origin + location.pathname}, données du ${D.date}.</p>
     <p>Les remarques, corrections et idées sont les bienvenues. Le bouton « Proposer une amélioration », en haut de la page, permet d'<a href="mailto:${CONTACT}">écrire à l'auteur</a>${DEPOT.includes("VOTRE-COMPTE") ? "" : ` ou d'ouvrir une proposition sur le <a href="${DEPOT}/issues" target="_blank" rel="noopener">dépôt GitHub</a>`}, avec le lien de la carte affichée.</p>
 
     <h2>Limites</h2>
     <ul>
       <li>La maille de départ n'est pas neutre. Les intercommunalités sont elles-mêmes des constructions politiques de tailles très inégales, et beaucoup chevauchent deux bassins ou deux provinces historiques.</li>
-      <li>Organiser chaque région autour d'une grande ville est une hypothèse forte qui pèse sur toutes les cartes. Deux pôles forment toujours deux régions distinctes, si bien que le choix des pôles décide d'une partie du résultat. La règle qui les désigne est simple et peut se discuter.</li>
+      <li>Organiser chaque région autour d'une grande ville est également une hypothèse forte qui pèse sur toutes les cartes subséquentes. Deux pôles forment toujours deux régions distinctes, si bien que le choix des pôles décide d'une partie du résultat. La règle qui les désigne est simple et peut se discuter.</li>
       <li>La méthode procède par étapes et ne garantit pas le meilleur découpage possible pour des poids donnés. Un petit changement de poids peut faire basculer un territoire disputé entre deux pôles, comme le montre l'exemple de l'étape 5.</li>
       <li>La compétitivité est réduite ici à une question de poids économique, mesuré par le PIB. Elle ne tient compte ni de la spécialisation des territoires, ni de l'innovation, ni des réseaux de transport.</li>
       <li>Le niveau de vie d'une région est approché par la moyenne des niveaux de vie médians de ses intercommunalités. Ce n'est pas la médiane régionale exacte, que l'on ne peut pas recalculer sans les données individuelles.</li>

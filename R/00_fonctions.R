@@ -112,3 +112,34 @@ corrections_fleuves <- function() list(
   "Garonne-Dordogne" = c("gironde"),
   "Escaut" = c("escaut", "scarpe", "lys", "deûle", "deule", "marque", "sensée", "sensee",
                "rhonelle", "écaillon", "ecaillon", "hogneau"))   # pas « selle » : une Selle se jette aussi dans la Somme
+
+# Boucher les trous entre intercommunalités. Les contours d'Etalab laissent des morceaux de territoire
+# couverts par aucune intercommunalité (environ 300, souvent de la taille d'une commune). Chaque trou est
+# rendu à l'intercommunalité avec laquelle il partage le plus de frontière. La géométrie doit être
+# projetée en mètres (Lambert 93).
+boucher_trous <- function(x) {
+  g <- st_geometry(x)
+  tout <- st_union(g)
+  plein <- st_union(st_sfc(lapply(st_cast(tout, "POLYGON"), function(p) st_polygon(list(p[[1]]))), crs = st_crs(g)))
+  trous <- st_difference(plein, tout)
+  if (length(trous) == 0 || st_is_empty(trous)) return(x)
+  if (any(st_geometry_type(trous) == "GEOMETRYCOLLECTION")) trous <- st_collection_extract(trous, "POLYGON")
+  trous <- st_cast(trous, "POLYGON")
+  trous <- trous[as.numeric(st_area(trous)) > 100]          # on ignore les miettes de moins de 100 m²
+  cible <- sapply(seq_along(trous), function(k) {
+    autour <- st_buffer(trous[k], 50)
+    v <- st_intersects(autour, g)[[1]]
+    if (!length(v)) return(NA_integer_)
+    v[which.max(as.numeric(st_area(st_intersection(g[v], autour))))]
+  })
+  geoms <- lapply(g, identity)
+  for (e in unique(na.omit(cible)))
+    geoms[[e]] <- st_cast(st_union(c(g[e], st_buffer(trous[which(cible == e)], 1))), "MULTIPOLYGON")[[1]]
+  cat(length(trous), "trous bouchés entre intercommunalités,", round(sum(as.numeric(st_area(trous))) / 1e6), "km²\n")
+  # st_make_valid peut rendre des collections (polygone + petite ligne) : on n'en garde que les polygones
+  geoms <- lapply(st_make_valid(st_sfc(geoms, crs = st_crs(g))), function(e) {
+    if (inherits(e, "GEOMETRYCOLLECTION")) e <- st_union(st_collection_extract(st_sfc(e), "POLYGON"))[[1]]
+    st_cast(st_sfc(e), "MULTIPOLYGON")[[1]] })
+  st_geometry(x) <- st_sfc(geoms, crs = st_crs(g))
+  x
+}

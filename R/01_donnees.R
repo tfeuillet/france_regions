@@ -23,6 +23,10 @@ jeu_emploi   <- "DS_FLORES_A5"
 mesure_revenu   <- "MED_SL"     # niveau de vie médian
 mesure_pauvrete <- "PR_MD60"    # taux de pauvreté (seuil 60 %)
 mesure_emploi   <- "EMPL3112"   # effectifs salariés fin décembre
+# Dynamique de l'emploi : évolution sur au plus 10 ans. Si Flores n'offre qu'une année,
+# on se rabat sur les effectifs salariés privés par EPCI publiés par l'Urssaf (data.gouv.fr).
+duree_dynamique <- 10
+jeu_urssaf      <- "61e2107d66c801bf6afbb3a8"
 
 # ---- 1. Communes et EPCI (API Découpage administratif) ------------
 metropole <- c("11", "24", "27", "28", "32", "44", "52", "53", "75", "76", "84", "93", "94")
@@ -46,6 +50,7 @@ epci <- st_read(fichier, quiet = TRUE) |>
   st_transform(2154) |>
   st_make_valid() |>
   arrange(code)
+epci <- boucher_trous(epci)      # trous des contours d'Etalab (voir R/00_fonctions.R)
 n <- nrow(epci)
 cat(n, "EPCI en métropole\n")
 epci$aire <- as.numeric(st_area(epci)) / 1e6      # km²
@@ -142,16 +147,63 @@ epci$pauvrete <- indicateur(mesure_pauvrete)
 flo <- melodi::get_all_data(jeu_emploi)
 flo$GEO <- as.character(flo$GEO)
 flo <- flo[flo$GEO_OBJECT == "COM" & flo$FLORES_MEASURE == mesure_emploi & flo$ACTIVITY != "_T", ]
-flo <- flo[flo$TIME_PERIOD == max(flo$TIME_PERIOD), ]
 # autres dimensions (taille, forme juridique…) : on garde le total "_T"
 for (v in setdiff(names(flo), c("GEO", "GEO_OBJECT", "FLORES_MEASURE", "TIME_PERIOD", "ACTIVITY", "OBS_VALUE")))
   if ("_T" %in% flo[[v]]) flo <- flo[flo[[v]] == "_T", ]
+flo_annees <- flo                                    # toutes les années, pour la dynamique (bloc 4 bis)
+flo <- flo[flo$TIME_PERIOD == max(flo$TIME_PERIOD), ]
 flo$epci <- factor(com$epci[match(flo$GEO, com$code)], levels = epci$code)
 emploi <- xtabs(as.numeric(OBS_VALUE) ~ epci + ACTIVITY, data = flo)
 parts <- as.data.frame.matrix(prop.table(emploi, 1))
 names(parts) <- paste0("emploi_", names(parts))
 epci <- cbind(epci, parts)
 epci$emploi_hab <- rowSums(emploi) / epci$pop
+
+# ---- 4 bis. Dynamique de l'emploi salarié --------------------------
+# Effectifs au début et à la fin de la période, par EPCI. On ne compte que les communes
+# présentes les deux années : une commune fusionnée entre-temps est laissée de côté
+# des deux côtés, ce qui évite de fausser l'évolution.
+a1 <- max(as.numeric(flo_annees$TIME_PERIOD))
+a0 <- max(min(as.numeric(flo_annees$TIME_PERIOD)), a1 - duree_dynamique)
+if (a0 < a1) {
+  emploi_annee <- function(a) { x <- flo_annees[as.numeric(flo_annees$TIME_PERIOD) == a, ]; tapply(as.numeric(x$OBS_VALUE), x$GEO, sum) }
+  e0 <- emploi_annee(a0); e1 <- emploi_annee(a1)
+  communes <- intersect(intersect(names(e0), names(e1)), com$code)
+  ep <- factor(com$epci[match(communes, com$code)], levels = epci$code)
+  epci$emp0 <- as.numeric(tapply(e0[communes], ep, sum))
+  epci$emp1 <- as.numeric(tapply(e1[communes], ep, sum))
+  source_dynamique <- paste0("Insee, Flores (", jeu_emploi, "), emploi salarié au 31 décembre, de ", a0, " à ", a1)
+} else {
+  # Repli : effectifs salariés privés annuels par EPCI (Urssaf)
+  meta <- fromJSON(paste0("https://www.data.gouv.fr/api/1/datasets/", jeu_urssaf, "/"))
+  res <- meta$resources[grepl("csv", meta$resources$format, ignore.case = TRUE), ]
+  u <- data.table::fread(telecharger(res$url[1], "data/brut/urssaf_epci.csv"), data.table = FALSE)
+  cat("Colonnes du fichier Urssaf :", paste(names(u), collapse = " | "), "\n")
+  # colonne des codes EPCI : celle dont les valeurs retrouvent le plus d'EPCI actuels
+  cand <- grep("epci|siren", names(u), ignore.case = TRUE, value = TRUE)
+  trouves <- sapply(cand, function(v) mean(epci$code %in% trimws(as.character(u[[v]]))))
+  cc <- if (length(cand)) cand[which.max(trouves)] else NA
+  ca <- grep("^ann|year", names(u), ignore.case = TRUE, value = TRUE)[1]
+  ce <- grep("effectif", names(u), ignore.case = TRUE, value = TRUE)[1]
+  if (anyNA(c(cc, ca, ce))) stop("Colonnes du fichier Urssaf introuvables. Colonnes : ", paste(names(u), collapse = ", "))
+  # effectifs moyens annuels : décimales possibles avec une virgule, espaces comme séparateur de milliers
+  nombre <- function(x) as.numeric(gsub(",", ".", gsub("[[:space:]\u00a0\u202f]", "", as.character(x))))
+  u$code_epci <- trimws(as.character(u[[cc]])); u$eff <- nombre(u[[ce]])
+  u$a <- as.numeric(substr(u[[ca]], 1, 4))
+  cat("Urssaf : codes EPCI lus dans « ", cc, " » (", round(100 * max(trouves)), " % des EPCI retrouvés), effectifs dans « ", ce,
+      " », années dans « ", ca, " »\n", sep = "")
+  a1 <- max(u$a, na.rm = TRUE); a0 <- max(min(u$a, na.rm = TRUE), a1 - duree_dynamique)
+  somme <- function(a) tapply(u$eff[u$a %in% a], u$code_epci[u$a %in% a], sum, na.rm = TRUE)
+  epci$emp0 <- as.numeric(somme(a0)[epci$code]); epci$emp1 <- as.numeric(somme(a1)[epci$code])
+  if (mean(is.na(epci$emp0) | is.na(epci$emp1)) > 0.2) {
+    print(head(u[u$a %in% a1, c(cc, ca, ce)]))
+    stop("Plus de 20 % des EPCI sans effectifs Urssaf. Début du fichier ci-dessus.")
+  }
+  source_dynamique <- paste0("Urssaf, effectifs salariés moyens annuels du secteur privé hors intérim, par EPCI, de ", a0, " à ", a1)
+}
+evol <- 100 * (sum(epci$emp1, na.rm = TRUE) / sum(epci$emp0, na.rm = TRUE) - 1)
+cat("Dynamique de l'emploi :", source_dynamique, "| évolution nationale", round(evol, 1), "% |",
+    sum(is.na(epci$emp0) | is.na(epci$emp1)), "EPCI sans valeur\n")
 
 # ---- 5. Navettes domicile-travail (Insee, recensement) -------------
 telecharger(url_flux, "data/brut/flux.zip")
@@ -230,6 +282,7 @@ write_json(list(
                   " ; contours NUTS 2024 © EuroGeographics (GISCO)"),
   revenus = paste0("Insee, Filosofi (", jeu_revenus, "), millésime ", max(filo$TIME_PERIOD)),
   emploi = paste0("Insee, Flores (", jeu_emploi, "), millésime ", max(flo$TIME_PERIOD)),
+  dynamique = source_dynamique,
   flux = paste0("Insee, recensement, base flux de mobilité domicile-travail (", col_flux, ")")
 ), "data/sources.json", auto_unbox = TRUE, pretty = TRUE)
 cat("Données prêtes.\n")

@@ -21,7 +21,9 @@ sources <- fromJSON("data/sources.json")
 d <- st_drop_geometry(epci)
 
 # valeurs manquantes -> médiane nationale
-for (v in names(d)[sapply(d, is.numeric)]) d[[v]][is.na(d[[v]])] <- median(d[[v]], na.rm = TRUE)
+# (sauf les effectifs de la dynamique de l'emploi : un EPCI sans valeur reste sans valeur, la page le traite à part)
+for (v in setdiff(names(d)[sapply(d, is.numeric)], c("emp0", "emp1"))) d[[v]][is.na(d[[v]])] <- median(d[[v]], na.rm = TRUE)
+if (is.null(d$emp0)) d$emp0 <- d$emp1 <- NA
 
 # ---- Voisinage (la Corse, île, reste à part) ---------------------------
 terre <- d$reg_actuelle != "94"
@@ -75,6 +77,7 @@ write_json(list(
   pop = d$pop, pop_ville = d$pop_ville, aire = round(d$aire, 1), x = round(xy[, 1], 1), y = round(xy[, 2], 1),
   lon = round(pt[, 1], 3), lat = round(pt[, 2], 3),
   revenu = round(d$revenu), pib = round(d$pib, 1),
+  emp0 = round(d$emp0), emp1 = round(d$emp1),
   bassin = d$bassin, fleuve = d$fleuve, agence = d$agence, dep = d$dep, anc_region = d$anc_region, province = d$province,
   reg_actuelle = d$reg_actuelle,
   z = round(Z, 3),

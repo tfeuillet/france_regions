@@ -27,7 +27,10 @@ const CRITERES = [
   { id: "equilibre", groupe: "avance", nom: "Équilibre démographique",
     aide: "Une région déjà très peuplée attire moins, ce qui rapproche les populations des régions." },
   { id: "compacite", groupe: "avance", type: "contrainte", nom: "Simplicité des frontières",
-    aide: "Un territoire déjà largement entouré par une région la rejoint en priorité. Les frontières sont plus courtes et les régions moins étirées." }
+    aide: "Un territoire déjà largement entouré par une région la rejoint en priorité. Les frontières sont plus courtes et les régions moins étirées." },
+  // ajouté en dernier pour que les liens partagés avant son arrivée restent valables (ordre des poids dans l'adresse)
+  { id: "dynamique", groupe: "base", nom: "Solidarité croissance-déclin",
+    aide: "Un territoire rejoint de préférence la région dont il rapproche l'évolution de l'emploi de la moyenne nationale. Chaque région mêle ainsi des territoires qui gagnent des emplois et d'autres qui en perdent." }
 ];
 
 const REGLAGES = {
@@ -69,12 +72,22 @@ function preparer(D) {
   for (const i of terre) { pop += D.pop[i]; rev += D.pop[i] * D.revenu[i]; }
   const revMoyen = rev / pop;
   for (const i of terre) variance += D.pop[i] * (D.revenu[i] - revMoyen) ** 2;
+  // dynamique de l'emploi : évolution des effectifs salariés (emp0 -> emp1), pondérée par l'emploi de départ
+  // un EPCI sans valeur (null, ou "NA" dans un ancien fichier) est laissé de côté
+  const dyn = D.pop.map((_, i) => D.emp0 && typeof D.emp0[i] === "number" && typeof D.emp1[i] === "number" && D.emp0[i] > 0 ? D.emp1[i] / D.emp0[i] - 1 : NaN);
+  const avecDyn = dyn.some(v => !Number.isNaN(v));
+  let e0 = 0, e1 = 0, vDyn = 0;
+  for (const i of terre) if (!Number.isNaN(dyn[i])) { e0 += D.emp0[i]; e1 += D.emp1[i]; }
+  const dynMoyen = e0 > 0 ? e1 / e0 - 1 : 0;
+  for (const i of terre) if (!Number.isNaN(dyn[i])) vDyn += D.emp0[i] * (dyn[i] - dynMoyen) ** 2;
+  const dynEcart = e0 > 0 ? Math.sqrt(vDyn / e0) || 1 : 1;
   const villes = [...terre].sort((a, b) => taille[b] - taille[a]);       // villes, de la plus grande à la plus petite
   let aire = 0; for (const i of terre) aire += D.aire[i];
   // repère européen : PIB médian des grandes régions (NUTS 1) des autres pays, en millions d'euros
   const pibs = D.nuts1.map(r => r.pib).sort((a, b) => a - b), m = pibs.length >> 1;
   const pibEurope = pibs.length % 2 ? pibs[m] : (pibs[m - 1] + pibs[m]) / 2;
-  return D.prep = { terre, dist, taille, villes, aire, voisins, echanges, total, pop, revMoyen, revEcart: Math.sqrt(variance / pop), pibEurope };
+  return D.prep = { terre, dist, taille, villes, aire, voisins, echanges, total, pop, revMoyen, revEcart: Math.sqrt(variance / pop), pibEurope,
+    avecDyn, dyn, dynMoyen, dynEcart };
 }
 
 // Choix des k pôles. Le premier est la plus grande ville. Les suivants sont choisis un à un : la ville
@@ -119,13 +132,14 @@ function regionaliser(D, poids, K) {
   const joindre = (r, i, sens = 1) => {
     const a = sens * D.aire[i], p = sens * D.pop[i];
     g[i] = sens > 0 ? r.id : -1; r.pop += p; r.aire += a; r.srev += p * D.revenu[i]; r.pib += sens * D.pib[i];
+    if (!Number.isNaN(P.dyn[i])) { r.se0 += sens * D.emp0[i]; r.se1 += sens * D.emp1[i]; }
     r.sx += a * D.x[i]; r.sy += a * D.y[i]; r.sq += a * (D.x[i] ** 2 + D.y[i] ** 2); r.propre += sens * D.aire[i] ** 2 / (2 * Math.PI);
     for (const [cat, v] of [["bassin", a], ["fleuve", a], ["agence", a], ["dep", p], ["anc_region", p], ["province", p]])
       r[cat].set(D[cat][i], (r[cat].get(D[cat][i]) || 0) + v);
     for (const [j, v] of P.echanges[i]) r.echanges.set(j, (r.echanges.get(j) || 0) + sens * v);
   };
   poles.forEach((p, s) => {
-    R.push({ id: s, pole: p, pop: 0, pib: 0, aire: 0, srev: 0, sx: 0, sy: 0, sq: 0, propre: 0,
+    R.push({ id: s, pole: p, pop: 0, pib: 0, aire: 0, srev: 0, se0: 0, se1: 0, sx: 0, sy: 0, sq: 0, propre: 0,
       bassin: new Map(), fleuve: new Map(), agence: new Map(), dep: new Map(), anc_region: new Map(), province: new Map(), echanges: new Map() });
     joindre(R[s], p);
   });
@@ -144,6 +158,12 @@ function regionaliser(D, poids, K) {
     solidarite: (i, r) => {
       const avant = r.srev / r.pop, apres = (r.srev + D.pop[i] * D.revenu[i]) / (r.pop + D.pop[i]);
       return 0.5 + 0.5 * Math.tanh(20 * (Math.abs(avant - P.revMoyen) - Math.abs(apres - P.revMoyen)) / P.revEcart);
+    },
+    // même principe pour l'évolution de l'emploi : le rattachement rapproche-t-il la dynamique de la région de la moyenne ?
+    dynamique: (i, r) => {
+      if (Number.isNaN(P.dyn[i])) return 0.5;
+      const avant = r.se0 > 0 ? r.se1 / r.se0 - 1 : P.dynMoyen, apres = (r.se1 + D.emp1[i]) / (r.se0 + D.emp0[i]) - 1;
+      return 0.5 + 0.5 * Math.tanh(20 * (Math.abs(avant - P.dynMoyen) - Math.abs(apres - P.dynMoyen)) / P.dynEcart);
     },
     flux: (i, r) => (r.echanges.get(i) || 0) / (P.total[i] || 1),
     provinces: (i, r) => 0.75 * part(r.province, D.province[i], r.pop) + 0.25 * part(r.dep, D.dep[i], r.pop),
@@ -217,24 +237,28 @@ function regionaliser(D, poids, K) {
     joindre(depart, i, -1);
     const contact = id => { let c = 0; for (const [j, l] of P.voisins[i]) if (g[j] === id) c += l; return Math.min(1, c / D.perimetre[i]); };
     const res = [...cand].map(id => { const r = R[id]; return { pole: r.pole, pop: r.pop, pib: r.pib, revenu: r.srev / r.pop,
+      dyn: r.se0 > 0 ? r.se1 / r.se0 - 1 : NaN,
       distance: P.dist(i, r.pole), contact: contact(id),
       parts: { province: part(r.province, D.province[i], r.pop), anc_region: part(r.anc_region, D.anc_region[i], r.pop),
         fleuve: part(r.fleuve, D.fleuve[i], r.aire) }, notes: Object.fromEntries(actifs.map(c => [c, notes[c](i, R[id])])),
       eloignement: eloignement(i, r), total: note(i, r) }; });
     joindre(depart, i);
-    return { actifs, somme, poids, regions: res, actuelle: depart.pole, revMoyen: P.revMoyen, popMoyenne: cible };
+    return { actifs, somme, poids, regions: res, actuelle: depart.pole, revMoyen: P.revMoyen, popMoyenne: cible,
+      dynMoyen: P.dynMoyen, dynI: P.dyn[i] };
   };
   return g;
 }
 
 // Description d'un découpage g (un identifiant de région par EPCI) : régions et indicateurs
 // poles (facultatif) : pôle de chaque région, qui lui donne alors son nom
+const ecart = v => v.length > 1 ? Math.max(...v) - Math.min(...v) : NaN;
 function decrire(D, g, poles) {
   const P = preparer(D), n = g.length, regions = new Map();
   let popTot = 0, revTot = 0;
   for (let i = 0; i < n; i++) {
     let r = regions.get(g[i]);
-    if (!r) regions.set(g[i], r = { id: g[i], pop: 0, pib: 0, aire: 0, n: 0, srev: 0, chef: i, perimetre: 0, voisines: new Set(), corse: true });
+    if (!r) regions.set(g[i], r = { id: g[i], pop: 0, pib: 0, aire: 0, n: 0, srev: 0, se0: 0, se1: 0, chef: i, perimetre: 0, voisines: new Set(), corse: true });
+    if (!Number.isNaN(P.dyn[i])) { r.se0 += D.emp0[i]; r.se1 += D.emp1[i]; }
     if (D.terre[i]) r.corse = false;          // une région dont aucune intercommunalité n'est sur le continent : la Corse
     const p = D.pop[i];
     r.pop += p; r.pib += D.pib[i]; r.aire += D.aire[i]; r.n++; r.srev += p * D.revenu[i]; r.perimetre += D.perimetre[i];
@@ -251,6 +275,7 @@ function decrire(D, g, poles) {
   let inter = 0, totale = 0;
   liste.forEach(r => {
     r.revenu = r.srev / r.pop; r.ville = D.ville[r.chef]; r.pibHab = 1e6 * r.pib / r.pop;
+    r.dyn = r.se0 > 0 ? r.se1 / r.se0 - 1 : NaN;
     r.compacite = 4 * Math.PI * r.aire / r.perimetre ** 2;
     inter += r.pop * (r.revenu - m) ** 2;
   });
@@ -277,7 +302,10 @@ function decrire(D, g, poles) {
     rapport_revenu: Math.max(...revs) / Math.min(...revs), gini,
     sous_europe: cont.filter(r => r.pib < pibEurope).length, n_continent: cont.length,
     bassins: integrite(D.fleuve), histoire: integrite(D.anc_region), provinces: integrite(D.province),
-    compacite: cont.reduce((s, r) => s + r.compacite, 0) / cont.length } };
+    compacite: cont.reduce((s, r) => s + r.compacite, 0) / cont.length,
+    // écart d'évolution de l'emploi entre la région la plus dynamique et la moins dynamique, en points
+    // (une région dont aucun EPCI n'a de valeur est laissée de côté)
+    ecart_dynamique: ecart(cont.map(r => r.dyn).filter(Number.isFinite)) } };
 }
 
 // Indice de Rand ajusté : ressemblance entre deux découpages (1 = identiques)

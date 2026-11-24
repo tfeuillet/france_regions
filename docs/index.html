@@ -95,10 +95,36 @@
   #explications td.lecture { font-size: 13px; color: var(--gris); min-width: 22ch; }
   .defile { overflow-x: auto; }
   .leaflet-container { font: inherit; }
+  /* Téléphones et petites tablettes : la page défile, la carte puis le panneau l'un sous l'autre */
   @media (max-width: 800px) {
-    main { flex-direction: column; }
-    #zone-carte { min-height: 60vh; }
-    aside { width: 100%; border-left: none; border-top: 1px solid var(--trait); }
+    html, body { height: auto; }
+    body { display: block; }
+    header { padding: 8px 12px 0; }
+    #titre { gap: 8px; margin-bottom: 6px; align-items: center; }
+    h1 { font-size: 19px; }
+    #contribuer { font-size: 13px; }
+    #contribuer > button { padding: 2px 8px; }
+    #contribuer div { width: min(300px, 90vw); }
+    #barre { display: block; }
+    nav { gap: 4px; }
+    nav button { font-size: 13.5px; padding: 4px 10px; border: 1px solid var(--trait); border-radius: 14px; }
+    nav button.actif { background: var(--accent); border-color: var(--accent); color: #fff; margin-bottom: 0; }
+    nav button.aide { margin-left: 0; border-color: var(--accent); }
+    #curseur { padding: 8px 0; }
+    #curseur input { flex: 1; width: auto; }
+    main { display: block; }
+    #carte { position: relative; inset: auto; height: min(62vh, 110vw); height: min(62svh, 110vw); }
+    #options { position: static; border: none; border-bottom: 1px solid var(--trait); border-radius: 0;
+               background: #fff; padding: 8px 12px; font-size: 14px; gap: 4px; }
+    #options .export button { font-size: 14px; padding: 3px 12px; }
+    #cartouche { display: none; }
+    aside { width: 100%; border-left: none; overflow: visible; padding: 12px; }
+    .poids { grid-template-columns: 1fr 110px 1.4em; }
+    #explications { padding: 0; }
+    #explications > div { padding: 14px; border: none; }
+    .leaflet-control-attribution { font-size: 10px; }
+    /* l'infobulle s'ouvre du côté le plus dégagé : elle ne doit pas dépasser la moitié de l'écran */
+    .leaflet-tooltip { white-space: normal; width: max-content; max-width: 46vw; font-size: 12.5px; }
   }
 </style>
 </head>
@@ -145,7 +171,10 @@ const DEPOT = "https://github.com/tfeuillet/france_regions";      // adresse du 
 // Fond de carte. Les serveurs d'OpenStreetMap ne sont pas prévus pour un fort trafic. Avant une large diffusion,
 // demander une clé gratuite à un fournisseur de tuiles (CARTO, MapTiler…) et changer cette adresse.
 const FOND = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const CREDITS = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · contours Etalab d\'après IGN, © EuroGeographics · données Insee, Sandre, Eurostat';
+const PRODUCTEURS = "Insee, Sandre, Eurostat";
+// l'Urssaf s'ajoute quand elle fournit l'évolution de l'emploi
+const producteurs = () => /Urssaf/.test((D && D.sources && D.sources.dynamique) || "") ? "Insee, Urssaf, Sandre, Eurostat" : PRODUCTEURS;
+const CREDITS = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · contours Etalab d\'après IGN, © EuroGeographics · données ' + PRODUCTEURS;
 
 // Couleurs sans bleu. Les 13 premières sont celles des régions actuelles (dans l'ordre de COULEUR_REGION),
 // les suivantes servent aux régions supplémentaires.
@@ -275,7 +304,7 @@ function demarrer() {
     INDICATEURS.splice(INDICATEURS.findIndex(i => i[0].startsWith("Écart d'évolution")), 1);
   }
   carte = L.map("carte", { zoomSnap: 0.25, preferCanvas: true }).fitBounds(FRANCE);
-  L.tileLayer(FOND, { maxZoom: 12, attribution: CREDITS }).addTo(carte);
+  L.tileLayer(FOND, { maxZoom: 12, attribution: CREDITS.replace(PRODUCTEURS, producteurs()) }).addTo(carte);
   // régions européennes NUTS 1 (hors France), sous les régions françaises
   carte.createPane("europe").style.zIndex = 350;
   couches.europe = L.geoJSON(nuts1, { pane: "europe", renderer: L.svg({ pane: "europe" }),
@@ -283,8 +312,10 @@ function demarrer() {
     onEachFeature: (f, l) => { const p = f.properties;
       l.bindTooltip(`<b>${p.nom}</b> (${p.id})<br>${nb(p.pop)} habitants<br>PIB ${milliards(p.pib)}, soit ${nb(1e6 * p.pib / p.pop)} € par habitant`, { sticky: true }); }
   }).addTo(carte);
-  couches.epci = L.geoJSON(epci, { onEachFeature: (f, l) =>
-    l.bindTooltip(() => infobulle(f.properties.i), { sticky: true }) }).addTo(carte);
+  couches.epci = L.geoJSON(epci, { onEachFeature: (f, l) => {
+    l.bindTooltip(() => infobulle(f.properties.i), { sticky: true });
+    // sur écran tactile, il n'y a pas de survol : toucher une intercommunalité ouvre son infobulle
+    l.on("click", e => l.openTooltip(e.latlng)); } }).addTo(carte);
   carte.createPane("limites").style.zIndex = 450;
   carte.getPane("limites").style.pointerEvents = "none";
   couches.aretes = L.geoJSON(aretes, { pane: "limites", interactive: false, renderer: L.svg({ pane: "limites" }) }).addTo(carte);
@@ -371,13 +402,14 @@ function bande(titre, europe, regions, format) {
   const x = v => 6 + 318 * (Math.log(Math.max(v, min)) - Math.log(min)) / (Math.log(max) - Math.log(min));
   const med = mediane(europe), sous = regions.filter(r => r.v < quantile(europe, 0.25)).length;
   return `<div class="bande"><b>${titre}</b>
-    <svg viewBox="0 0 330 50" role="img" aria-label="${titre} des régions de la carte comparé à celui des régions européennes NUTS 1">
-      <line x1="6" x2="324" y1="14" y2="14" stroke="#ddd8cc"/>
-      ${europe.map(v => `<circle cx="${x(v).toFixed(1)}" cy="14" r="3" fill="#6f6a60" fill-opacity=".35"/>`).join("")}
-      <line x1="${x(med)}" x2="${x(med)}" y1="5" y2="23" stroke="#23201b" stroke-width="1.5"/>
-      ${regions.map(r => `<rect x="${(x(r.v) - 1.5).toFixed(1)}" y="25" width="3" height="12" fill="${PALETTE[r.c]}" stroke="#0005" stroke-width=".4"><title>${r.nom} : ${format(r.v)}</title></rect>`).join("")}
-      <text x="6" y="48">${format(min)}</text><text x="324" y="48" text-anchor="end">${format(max)}</text>
-      <text x="${x(med)}" y="48" text-anchor="middle">médiane européenne ${format(med)}</text>
+    <svg viewBox="0 0 330 60" role="img" aria-label="${titre} des régions de la carte comparé à celui des régions européennes NUTS 1">
+      <line x1="6" x2="324" y1="24" y2="24" stroke="#ddd8cc"/>
+      ${europe.map(v => `<circle cx="${x(v).toFixed(1)}" cy="24" r="3" fill="#6f6a60" fill-opacity=".35"/>`).join("")}
+      <line x1="${x(med)}" x2="${x(med)}" y1="15" y2="33" stroke="#23201b" stroke-width="1.5"/>
+      ${regions.map(r => `<rect x="${(x(r.v) - 1.5).toFixed(1)}" y="35" width="3" height="12" fill="${PALETTE[r.c]}" stroke="#0005" stroke-width=".4"><title>${r.nom} : ${format(r.v)}</title></rect>`).join("")}
+      <text x="6" y="58">${format(min)}</text><text x="324" y="58" text-anchor="end">${format(max)}</text>
+      <!-- la médiane est écrite au-dessus de l'axe, pour ne jamais chevaucher le minimum et le maximum -->
+      <text x="${Math.min(Math.max(x(med), 75), 255)}" y="10" text-anchor="middle">médiane européenne ${format(med)}</text>
     </svg>
     <span class="petit">La médiane des régions de la carte est de ${format(mediane(regions.map(r => r.v)))}, et ${sous} sur ${regions.length} se situent dans le quart inférieur des régions européennes.</span></div>`;
 }
@@ -512,7 +544,7 @@ function carteSVG() {
       <text x="${x + 20}" y="${yy}" class="l">${xml(r.ville)}</text><text x="${x + larg - 14}" y="${yy}" class="l" text-anchor="end">${xml(millions(r.pop))}</text>`; });
   const auteur = sansBalises(AUTEUR), adresse = location.href;
   const date = /^\d{4}-\d{2}-\d{2}$/.test(D.date) ? D.date.split("-").reverse().join("/") : D.date;
-  const pied = [`Données du ${date}. Sources : Insee, Sandre, Eurostat ; contours Etalab d'après l'IGN, © EuroGeographics.`, auteur, adresse];
+  const pied = [`Données du ${date}. Sources : ${producteurs()} ; contours Etalab d'après l'IGN, © EuroGeographics.`, auteur, adresse];
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
   <style>
     text { font-family: Georgia, "Times New Roman", serif; fill: #23201b; }
